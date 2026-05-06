@@ -63,11 +63,20 @@ else()
     )
 endif()
 
+# Build a small CLI listener to receive status reports
+add_executable(cammon_listener src/status_listener.cpp)
+target_link_libraries(cammon_listener PRIVATE cammon pthread)
+
+after_build:
 # Install rules
 install(TARGETS cammon
     RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
     LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
     ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+)
+
+install(TARGETS cammon_listener
+    RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
 )
 
 install(FILES ${CAMMON_HEADERS} DESTINATION ${CMAKE_INSTALL_PREFIX}/include/cammon)
