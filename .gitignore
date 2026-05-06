@@ -1,0 +1,38 @@
+# Compiled Java files
+*.class
+*.jar
+*.war
+*.ear
+
+# Java target directory
+cam_mon_java/target/
+
+# C++ build directories
+cam_mon_cpp/build/
+!cam_mon_cpp/build/.gitkeep
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Native libraries (add if needed)
+# *.dll
+# *.so
+# *.so.*
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
