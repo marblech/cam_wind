@@ -78,42 +78,54 @@ std::vector<uint8_t> Packet::serialize() const {
 std::optional<Packet> Packet::deserialize(const std::vector<uint8_t>& buf) {
     // 最小长度检查: 2头 + 3控制 + 15数据 + 1校验 + 2尾 = 23
     if (buf.size() < 23) return std::nullopt;
-    
-    // 验证帧头
-    if (buf[0] != FRAME_HDR1 || buf[1] != FRAME_HDR2) return std::nullopt;
-    
-    // 查找帧尾
-    if (buf[buf.size()-2] != FRAME_TAIL1 || buf[buf.size()-1] != FRAME_TAIL2) {
-        // 在缓冲区末尾附近查找帧尾
-        bool found = false;
-        size_t tail_idx = 0;
-        for (size_t i = 0; i + 1 < buf.size(); ++i) {
-            if (buf[i] == FRAME_TAIL1 && buf[i+1] == FRAME_TAIL2) { found = true; tail_idx = i; break; }
+
+    // 支持流式缓冲区：在缓冲区内查找首个合法帧（header .. tail），并只解析该帧。
+    size_t n = buf.size();
+    for (size_t start = 0; start + 1 < n; ++start) {
+        if (buf[start] != FRAME_HDR1 || buf[start+1] != FRAME_HDR2) continue;
+        // 找到可能的帧头，从 start + minimal_length - 1 寻找帧尾位置
+        size_t min_tail_idx = start + 23 - 1; // 最小帧尾索引 (inclusive)
+        if (min_tail_idx + 1 >= n) {
+            // 不足以包含最小帧，继续搜索下一个可能的起始位置
+            continue;
         }
-        if (!found) return std::nullopt;
+        // 查找帧尾 (FRAME_TAIL1, FRAME_TAIL2)
+        for (size_t tail_idx = min_tail_idx; tail_idx + 1 < n; ++tail_idx) {
+            if (buf[tail_idx] == FRAME_TAIL1 && buf[tail_idx+1] == FRAME_TAIL2) {
+                // 拷贝该帧的字节范围 [start, tail_idx+1]
+                std::vector<uint8_t> frame(buf.begin() + start, buf.begin() + tail_idx + 2);
+                // 基本验证
+                if (frame.size() < 23) break; // should not happen
+                // 解析字段
+                Packet p;
+                size_t idx = 2; // after hdr1,hdr2
+                p.addr = frame[idx++];
+                p.func = frame[idx++];
+                p.ctrl = frame[idx++];
+
+                size_t expected_cs_idx = frame.size() - 3; // checksum position relative to frame
+                if (expected_cs_idx <= idx) break;
+                p.data.assign(frame.begin() + idx, frame.begin() + expected_cs_idx);
+                p.checksum = frame[expected_cs_idx];
+
+                // 验证校验和（地址..数据）
+                std::vector<uint8_t> csrange;
+                csrange.push_back(p.addr);
+                csrange.push_back(p.func);
+                csrange.push_back(p.ctrl);
+                csrange.insert(csrange.end(), p.data.begin(), p.data.end());
+                if (compute_xor_checksum(csrange) != p.checksum) {
+                    // 校验失败，继续在当前 start 下寻找下一个可能的尾
+                    continue;
+                }
+
+                return p;
+            }
+        }
+        // 未找到合适的尾部，继续搜索下一个起始位置
     }
-    
-    Packet p;
-    size_t idx = 2;
-    p.addr = buf[idx++];
-    p.func = buf[idx++];
-    p.ctrl = buf[idx++];
-    
-    // 提取数据区（校验和位置 = 缓冲区大小 - 3）
-    size_t expected_cs_idx = buf.size() - 3;
-    if (expected_cs_idx <= idx) return std::nullopt;
-    p.data.assign(buf.begin() + idx, buf.begin() + expected_cs_idx);
-    p.checksum = buf[expected_cs_idx];
-    
-    // 验证校验和
-    std::vector<uint8_t> csrange;
-    csrange.push_back(p.addr);
-    csrange.push_back(p.func);
-    csrange.push_back(p.ctrl);
-    csrange.insert(csrange.end(), p.data.begin(), p.data.end());
-    if (compute_xor_checksum(csrange) != p.checksum) return std::nullopt;
-    
-    return p;
+
+    return std::nullopt;
 }
 
 // ============================================================================
