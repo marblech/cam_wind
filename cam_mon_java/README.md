@@ -240,6 +240,36 @@ public class DirectNativeAccess {
 }
 ```
 
+## 新增 JNI 功能（监听器与 PTZ）
+
+库已新增 native 监听器与 PTZ 读写接口，便于在 Java 层异步监听设备状态并读取语义化的 PTZ 数据：
+
+- `CamMonNative.startStatusListener(int port)` — 在 native 层启动后台 UDP 监听器，监听端口并缓存最后一帧
+- `CamMonNative.stopStatusListener()` — 停止监听器
+- `CamMonNative.getLastStatus()` — 返回最近收到的原始状态帧（`byte[]`）
+- `CamMonNative.getPTZ()` — 返回 `com.marble.cammon.PTZStatus` 对象（字段：`az, el, irFocus, visFocus`）
+- `CamMonNative.setPTZ(String host, int port, float az, float el, float azs, float els, int distance, byte seq, byte control)` — 发送舵机控制命令并返回响应字节数（int）
+
+示例（读取 PTZ 并发送控制）：
+
+```java
+// 加载 native 库
+System.loadLibrary("cammon");
+
+// 启动监听（native 层后台线程）
+CamMonNative.startStatusListener(5001);
+
+// 获取语义化 PTZ 对象
+PTZStatus p = CamMonNative.getPTZ();
+System.out.println("PTZ: az=" + p.az + " el=" + p.el);
+
+// 发送 PTZ 指令到设备
+int result = CamMonNative.setPTZ("127.0.0.1", 4001, 10.0f, 5.0f, 1.0f, 1.0f, 1000, (byte)1, (byte)0x11);
+System.out.println("setPTZ result: " + result);
+
+CamMonNative.stopStatusListener();
+```
+
 ### 运行测试
 
 ```bash
@@ -251,6 +281,24 @@ java -Djava.library.path=native -cp target/cam_mon_java-1.0-SNAPSHOT.jar \
 java -Djava.library.path=native -cp target/cam_mon_java-1.0-SNAPSHOT.jar \
     com.marble.cammon.DebugClient 192.168.1.100 5000
 ```
+
+集成测试（建议）
+
+1. 先在 `cam_mon_cpp` 下构建 native 库：
+
+```bash
+cd cam_mon_cpp && mkdir -p build && cd build
+cmake .. && make -j$(nproc)
+```
+
+2. 回到 Java 项目并运行 maven 测试（确保 `java.library.path` 指向 native 构建目录）：
+
+```bash
+cd ../../cam_mon_java
+mvn test -Djava.library.path=../cam_mon_cpp/build
+```
+
+（项目包含 `PTZIntegrationTest`，它会启动 `ServerSimulator` 并验证 `getPTZ()`/`setPTZ()` 的端到端行为。）
 
 ## API 参考
 
