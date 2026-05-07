@@ -17,6 +17,7 @@
 #include <memory>
 #include <cstring>
 #include "protocol.h"
+#include "cam_controller.h"
 
 extern "C" {
 /**
@@ -58,6 +59,10 @@ int cammon_send_camera_command(const char* host, int port, uint8_t func, uint8_t
  */
 int cammon_send_servo_command(const char* host, int port, float az, float el, float azs, float els, uint16_t target_distance, uint8_t seq, uint8_t control, uint8_t device_type, uint8_t packet_type, uint8_t* resp_buf, int resp_buf_len, int timeout_ms);
 }
+
+// singleton controller instance managed by JNI
+static CamController* g_controller = nullptr;
+
 
 /**
  * @brief 辅助函数：将 Java jbyteArray 转换为 C++ std::vector<uint8_t>
@@ -171,6 +176,70 @@ JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendServoComman
     jbyteArray out = env->NewByteArray(r);
     env->SetByteArrayRegion(out, 0, r, reinterpret_cast<jbyte*>(resp.get()));
     return out;
+}
+
+/**
+ * @brief JNI: start background status listener
+ * @return true if started successfully
+ */
+JNIEXPORT jboolean JNICALL Java_com_marble_cammon_CamMonNative_startStatusListener(JNIEnv* env, jclass, jint port) {
+    if (g_controller) return JNI_FALSE;
+    g_controller = cam_controller_create();
+    if (!g_controller) return JNI_FALSE;
+    int r = cam_controller_start(g_controller, (int)port);
+    if (r != 0) {
+        cam_controller_destroy(g_controller);
+        g_controller = nullptr;
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
+}
+
+/**
+ * @brief JNI: stop the background listener
+ */
+JNIEXPORT void JNICALL Java_com_marble_cammon_CamMonNative_stopStatusListener(JNIEnv* env, jclass) {
+    if (!g_controller) return;
+    cam_controller_stop(g_controller);
+    cam_controller_destroy(g_controller);
+    g_controller = nullptr;
+}
+
+/**
+ * @brief JNI: get last received status packet as byte[]
+ */
+JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_getLastStatus(JNIEnv* env, jclass) {
+    if (!g_controller) return NULL;
+    const int RESP_MAX = 2048;
+    uint8_t buf[RESP_MAX];
+    int n = cam_controller_get_last(g_controller, buf, RESP_MAX);
+    if (n <= 0) return NULL;
+    jbyteArray out = env->NewByteArray(n);
+    env->SetByteArrayRegion(out, 0, n, reinterpret_cast<jbyte*>(buf));
+    return out;
+}
+
+JNIEXPORT jobject JNICALL Java_com_marble_cammon_CamMonNative_getPTZ(JNIEnv* env, jclass) {
+    if (!g_controller) return NULL;
+    float az=0, el=0, ir=0, vis=0;
+    int ok = cam_controller_get_ptz(g_controller, &az, &el, &ir, &vis);
+    if (!ok) return NULL;
+    // Find PTZStatus class and construct object
+    jclass cls = env->FindClass("com/marble/cammon/PTZStatus");
+    if (!cls) return NULL;
+    jmethodID ctor = env->GetMethodID(cls, "<init>", "(FFFF)V");
+    if (!ctor) return NULL;
+    jobject obj = env->NewObject(cls, ctor, (jfloat)az, (jfloat)el, (jfloat)ir, (jfloat)vis);
+    return obj;
+}
+
+JNIEXPORT jint JNICALL Java_com_marble_cammon_CamMonNative_setPTZ(JNIEnv* env, jclass, jstring jhost, jint port, jfloat az, jfloat el, jfloat azs, jfloat els, jint targetDistance, jint seq, jint control, jint deviceType, jint packetType, jint timeoutMs) {
+    const char* host = env->GetStringUTFChars(jhost, NULL);
+    const int RESP_MAX = 2048;
+    std::unique_ptr<uint8_t[]> resp(new uint8_t[RESP_MAX]);
+    int r = cam_controller_set_ptz(g_controller, host, (int)port, (float)az, (float)el, (float)azs, (float)els, (uint16_t)targetDistance, (uint8_t)seq, (uint8_t)control, (uint8_t)deviceType, (uint8_t)packetType, resp.get(), RESP_MAX, (int)timeoutMs);
+    env->ReleaseStringUTFChars(jhost, host);
+    return r;
 }
 
 } // extern "C"

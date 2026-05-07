@@ -73,4 +73,32 @@ public class CamMonNative {
      * @return 响应数据字节数组，失败返回 null
      */
     public static native byte[] sendServoCommand(String host, int port, float az, float el, float azSpeed, float elSpeed, int targetDistance, int seq, int control, int deviceType, int packetType, int timeoutMs);
+
+    /**
+     * Start a background UDP listener for status reports on the given port.
+     * @param port UDP port to bind
+     * @return true on success
+     */
+    public static native boolean startStatusListener(int port);
+
+    /**
+     * Stop the background status listener.
+     */
+    public static native void stopStatusListener();
+
+    /**
+     * Get the last received status packet as a byte array, or null if none.
+     */
+    public static native byte[] getLastStatus();
+
+    /**
+     * Get last parsed PTZ values as a `PTZStatus` object (az, el, irFocus, visFocus).
+     * Returns null if no status frame available.
+     */
+    public static native PTZStatus getPTZ();
+
+    /**
+     * Send PTZ command to camera (servo control). Returns number of response bytes (>0) or negative error code.
+     */
+    public static native int setPTZ(String host, int port, float az, float el, float azSpeed, float elSpeed, int targetDistance, int seq, int control, int deviceType, int packetType, int timeoutMs);
 }

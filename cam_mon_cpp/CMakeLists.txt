@@ -12,10 +12,15 @@ set(CAMMON_SOURCES
     src/cammon_api.cpp
     src/protocol.cpp
     src/cammon_jni.cpp
+    src/cam_controller.cpp
+    src/cam_ajf_lib.cpp
 )
 
 set(CAMMON_HEADERS
     src/protocol.h
+    src/cammon_api.h
+    src/cam_ajf_lib.h
+    src/cam_controller.h
 )
 
 # Build as shared library (DLL on Windows, SO on Linux)
@@ -63,11 +68,6 @@ else()
     )
 endif()
 
-# Build a small CLI listener to receive status reports
-add_executable(cammon_listener src/status_listener.cpp)
-target_link_libraries(cammon_listener PRIVATE cammon pthread)
-
-after_build:
 # Install rules
 install(TARGETS cammon
     RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
@@ -75,8 +75,5 @@ install(TARGETS cammon
     ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
 )
 
-install(TARGETS cammon_listener
-    RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
-)
 
 install(FILES ${CAMMON_HEADERS} DESTINATION ${CMAKE_INSTALL_PREFIX}/include/cammon)
