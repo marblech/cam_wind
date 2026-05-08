@@ -17,8 +17,10 @@ namespace cammon {
  * @return uint8_t 1 字节 XOR 校验和
  */
 uint8_t compute_xor_checksum(const std::vector<uint8_t>& bytes) {
+    // NOTE: manufacturer examples use additive checksum (mod 256) over address..data.
+    // Keep function name for compatibility but implement as sum.
     uint8_t cs = 0;
-    for (auto b : bytes) cs ^= b;
+    for (auto b : bytes) cs = static_cast<uint8_t>(cs + b);
     return cs;
 }
 
