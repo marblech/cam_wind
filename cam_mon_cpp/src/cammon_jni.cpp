@@ -240,6 +240,20 @@ JNIEXPORT jint JNICALL Java_com_marble_cammon_CamMonNative_setPTZ(JNIEnv* env, j
     int r = cam_controller_set_ptz(g_controller, host, (int)port, (float)az, (float)el, (float)azs, (float)els, (uint16_t)targetDistance, (uint8_t)seq, (uint8_t)control, (uint8_t)deviceType, (uint8_t)packetType, resp.get(), RESP_MAX, (int)timeoutMs);
     env->ReleaseStringUTFChars(jhost, host);
     return r;
+// JNI wrapper for generic sendPacket
+JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendPacket(JNIEnv* env, jclass, jstring jhost, jint port, jbyte addr, jbyte func, jbyte ctrl, jbyteArray jpayload, jint timeoutMs) {
+    const char* host = env->GetStringUTFChars(jhost, NULL);
+    auto payload = to_vector_uint8(env, jpayload);
+    const int RESP_MAX = 2048;
+    std::unique_ptr<uint8_t[]> resp(new uint8_t[RESP_MAX]);
+    int r = cammon_send_packet(host, port, (uint8_t)addr, (uint8_t)func, (uint8_t)ctrl, payload.empty() ? nullptr : payload.data(), (int)payload.size(), resp.get(), RESP_MAX, timeoutMs);
+    env->ReleaseStringUTFChars(jhost, host);
+    if (r <= 0) return NULL;
+    jbyteArray out = env->NewByteArray(r);
+    env->SetByteArrayRegion(out, 0, r, reinterpret_cast<jbyte*>(resp.get()));
+    return out;
+}
+
 }
 
 } // extern "C"
