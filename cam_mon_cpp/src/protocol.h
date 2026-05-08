@@ -114,6 +114,125 @@ enum CameraControl : uint8_t {
 // 标准数据包结构
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// 协议功能码枚举补充（跟随协议 v0.07 文档）
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief 跟踪处理器 / 可见光 / 红外 功能码（高层命令分类）
+ *
+ * 常用值参考协议 3.3.3 / 3.3.4 中的定义。
+ */
+enum TrackerFunction : uint8_t {
+    TRACKER_FUNC_DISPLAY_SWITCH        = 0x00, ///< 显示切换（可见/红外等）
+    TRACKER_FUNC_CROSSHAIR_SHOW        = 0x01, ///< 十字线显示/消隐（control 指定显示或消隐）
+    TRACKER_FUNC_CROSSHAIR_UP          = 0x02, ///< 十字线上移（data[0]=移动像素数量）
+    TRACKER_FUNC_CROSSHAIR_DOWN        = 0x03, ///< 十字线下移
+    TRACKER_FUNC_CROSSHAIR_LEFT        = 0x04, ///< 十字线左移
+    TRACKER_FUNC_CROSSHAIR_RIGHT       = 0x05, ///< 十字线右移
+    TRACKER_FUNC_SET_CROSSHAIR_POS     = 0x06, ///< 设置十字线位置（data[0-1]=X, [2-3]=Y）
+    TRACKER_FUNC_SAVE_CROSSHAIR        = 0x07, ///< 保存十字线位置与显隐状态
+    TRACKER_FUNC_OSD_DISPLAY           = 0x08, ///< OSD 显示控制（开启/文字/刻度等）
+    TRACKER_FUNC_TIME_SYNC             = 0x03  ///< 时统设置（在某些实现中使用，见文档）
+};
+
+/**
+ * @brief 跟踪相关的检测/识别/跟踪指令枚举（部分）
+ *
+ * 这些功能码用于控制检测、识别与跟踪流程，详见协议 3.3.3 / 3.3.4。
+ */
+enum DetectionFunction : uint8_t {
+    DETECT_FUNC_POINT_TARGET        = 0x04, ///< 检测（点目标）
+    DETECT_FUNC_SENSITIVITY_SET     = 0x02, ///< 检测灵敏度设置
+    DETECT_FUNC_DETECT_TO_TRACK_ON  = 0x03, ///< 检测转跟踪 开
+    DETECT_FUNC_DETECT_TO_TRACK_OFF = 0x04  ///< 检测转跟踪 关
+};
+
+/**
+ * @brief 识别（类别）相关函数码与控制
+ *
+ * 识别功能包括：开启/关闭识别、设定识别区域、识别灵敏度等。
+ */
+enum RecognitionFunction : uint8_t {
+    RECOG_FUNC_ENABLE               = 0x00, ///< 识别开关（0: 关, 1: 开）
+    RECOG_FUNC_AREA_KIND_TIME_SET   = 0x01, ///< 识别区域、种类与时间设置
+    RECOG_FUNC_SENSITIVITY_SET      = 0x02, ///< 识别灵敏度设置
+    RECOG_FUNC_RECOG_TO_TRACK_ON    = 0x03, ///< 识别转跟踪 开
+    RECOG_FUNC_RECOG_TO_TRACK_OFF   = 0x04  ///< 识别转跟踪 关
+};
+
+/**
+ * @brief 识别目标类别位掩码（data 字节按位表示各类是否开启/选择）
+ *
+ * 对应协议说明：Bit0=人, Bit1=车, Bit2=船, Bit3=飞机, Bit4=无人机, Bit5-7 预留
+ */
+enum IdentificationCategory : uint8_t {
+    ID_CAT_PERSON   = 1u << 0, ///< 人
+    ID_CAT_VEHICLE  = 1u << 1, ///< 车
+    ID_CAT_SHIP     = 1u << 2, ///< 船
+    ID_CAT_AIRCRAFT = 1u << 3, ///< 飞机
+    ID_CAT_DRONE    = 1u << 4  ///< 无人机
+};
+
+/**
+ * @brief 环境控制（环控）功能位
+ *
+ * 参见协议 3.3.5（雨刷、加热等）
+ */
+enum EnvControlFunction : uint8_t {
+    ENV_FUNC_WIPER      = 0x01, ///< 雨刷控制（0 关闭，FF 打开）
+    ENV_FUNC_HEATER     = 0x02  ///< 加热（0 关闭，FF 打开）
+};
+
+/**
+ * @brief 跟踪/控制命令（通用跟踪类功能码示例）
+ *
+ * 例如点选跟踪、识别辅助点选跟踪、设置波门、手动框选等。
+ */
+enum TrackCommand : uint8_t {
+    TRACK_CMD_POINT_SELECT_TRACK = 0x00, ///< 点选跟踪
+    TRACK_CMD_RECOG_AID_SELECT   = 0x01, ///< 识别辅助点选跟踪
+    TRACK_CMD_SET_LOST_THRESHOLD = 0x02, ///< 跟踪丢失阈值
+    TRACK_CMD_RECAPTURE_THRESHOLD= 0x03, ///< 重捕获阈值
+    TRACK_CMD_CANCEL_TRACK       = 0x04, ///< 取消跟踪
+    TRACK_CMD_ADAPTIVE_GATE_ON   = 0x05, ///< 自适应波门开
+    TRACK_CMD_SET_DEFAULT_GATE   = 0x06, ///< 设置默认波门尺寸
+    TRACK_CMD_MEMORY_TRACK_TIME  = 0x07  ///< 记忆跟踪时间设置
+};
+
+/**
+ * @brief 扫描生成器功能（扫描方式）
+ *
+ * 参见协议 3.3.6：预置点巡航、线扫、帧扫描、苹果皮扫描等。
+ */
+enum ScanFunction : uint8_t {
+    SCAN_FUNC_SET_MODE       = 0x01, ///< 设定扫描方式
+    SCAN_FUNC_PRESET_WRITE   = 0x02, ///< 预置点写入 / 操作
+    SCAN_FUNC_PRESET_READ    = 0x02  ///< 预置点读取（同编码，区分 control/子域）
+};
+
+/**
+ * @brief 伺服控制（Servo）中的控制位 / 模式位掩码说明
+ *
+ * 协议对伺服 control 字节的位有约定：低四位与高四位可能表示不同含义（测试/位置/速度等），
+ * 此处定义常用常量供调用端形成 control 字节。
+ */
+enum ServoControlFlags : uint8_t {
+    SERVO_CTRL_STOP           = 0x00, ///< 停止
+    SERVO_CTRL_TEST_MODE_MASK = 0x80, ///< 测试模式掩码示例（高位）
+    SERVO_CTRL_POSITION_MASK  = 0x01, ///< 位置模式（低位示例）
+    SERVO_CTRL_SPEED_MASK     = 0x02  ///< 速度模式（低位示例）
+};
+
+// ---------------------------------------------------------------------------
+// 结束 协议功能码枚举补充
+// ---------------------------------------------------------------------------
+
+
+// ============================================================================
+// 标准数据包结构
+// ============================================================================
+
 /**
  * @brief 标准通信数据包结构
  * 
