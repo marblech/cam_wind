@@ -106,8 +106,17 @@ enum VisibleCameraFunction : uint8_t {
 enum CameraControl : uint8_t {
     CAM_CTRL_STOP         = 0x00, ///< 停止 / 关闭 / 或作为“减/停止”的通用编码
     CAM_CTRL_CONT_PLUS    = 0x01, ///< 连续/步进操作的“增加 / 向正”控制
-    CAM_CTRL_CONT_MINUS   = 0x02  ///< 连续/步进操作的“减少 / 向负”控制
+    CAM_CTRL_CONT_MINUS   = 0x02, ///< 连续/步进操作的“减少 / 向负”控制
+    CAM_CTRL_ZOOM         = 0x05, ///< 变焦操作的控制码示例（协议示例中用到）
+    CAM_CTRL_FOCAL        = 0x06  ///< 焦距直达控制码示例（协议示例中用到）
 };
+
+// 通用常量
+static constexpr uint8_t DEFAULT_SEQ = 0x01;
+static constexpr uint8_t SERVO_CTRL_POSITION = 0x11; ///< 伺服位置控制字节（常用）
+static constexpr uint8_t SERVO_DEVICE_TYPE = 0x01;    ///< 舵机设备类型
+static constexpr uint8_t SERVO_PACKET_TYPE_POINT = 0x02; ///< 定点报文类型
+static constexpr uint8_t DEFAULT_MOVE_AMOUNT = 0x0A; ///< 默认移动量（十字线等）
 
 
 // ============================================================================
@@ -134,6 +143,17 @@ enum TrackerFunction : uint8_t {
     TRACKER_FUNC_SAVE_CROSSHAIR        = 0x07, ///< 保存十字线位置与显隐状态
     TRACKER_FUNC_OSD_DISPLAY           = 0x08, ///< OSD 显示控制（开启/文字/刻度等）
     TRACKER_FUNC_TIME_SYNC             = 0x03  ///< 时统设置（在某些实现中使用，见文档）
+};
+
+/**
+ * @brief 跟踪器控制位（用于指定具体动作，如上/下/左/右）
+ */
+enum TrackerControl : uint8_t {
+    TRACKER_CTRL_SHOW      = 0x01, ///< 十字线显示/消隐
+    TRACKER_CTRL_UP        = 0x02, ///< 十字线上移
+    TRACKER_CTRL_DOWN      = 0x03, ///< 十字线下移
+    TRACKER_CTRL_LEFT      = 0x04, ///< 十字线左移
+    TRACKER_CTRL_RIGHT     = 0x05  ///< 十字线右移
 };
 
 /**

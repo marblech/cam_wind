@@ -232,10 +232,10 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_spe
     std::vector<uint8_t> packet = build_servo_packet(
         azimuth, elevation, az_speed, el_speed, 
         /*target_distance=*/0,  // 默认不使用距离
-        /*seq=*/0x01,
-        /*control=*/0x11,  // 位置控制标志
-        /*device_type=*/0x01,
-        /*packet_type=*/0x02
+        /*seq=*/DEFAULT_SEQ,
+        /*control=*/SERVO_CTRL_POSITION,  // 位置控制标志
+        /*device_type=*/SERVO_DEVICE_TYPE,
+        /*packet_type=*/SERVO_PACKET_TYPE_POINT
     );
     
     // 发送命令
@@ -302,7 +302,7 @@ bool CamAJFLib::set_zoom(float zoom) {
     uint8_t zoom_val = static_cast<uint8_t>(std::min(255.0f, std::max(0.0f, zoom)));
     payload[0] = zoom_val;
     
-    Packet pkt = make_camera_command(/*func=*/0x01, /*ctrl=*/0x05, payload);
+    Packet pkt = make_camera_command(static_cast<uint8_t>(VisibleCameraFunction::VC_FUNC_CONTINUOUS_ZOOM), /*ctrl=*/CAM_CTRL_ZOOM, payload);
     auto out = pkt.serialize();
     
     sockaddr_in serv{};
@@ -338,7 +338,7 @@ bool CamAJFLib::set_focus(float focus) {
     payload[2] = (focus_bits >> 16) & 0xFF;
     payload[3] = (focus_bits >> 24) & 0xFF;
     
-    Packet pkt = make_camera_command(/*func=*/0x01, /*ctrl=*/0x06, payload);
+    Packet pkt = make_camera_command(static_cast<uint8_t>(VisibleCameraFunction::VC_FUNC_CONTINUOUS_ZOOM), /*ctrl=*/CAM_CTRL_FOCAL, payload);
     auto out = pkt.serialize();
     
     sockaddr_in serv{};
