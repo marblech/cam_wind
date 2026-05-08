@@ -54,6 +54,19 @@ int cammon_send_camera_command(const char* host, int port,
                                 int timeout_ms);
 
 /**
+ * @brief 发送通用协议数据包（可指定地址）
+ * 
+ * 构建一个标准帧（0x0F 0xF0 ... 0xF0 0x0F），并发送到目标主机。
+ * 可用于向跟踪处理器（addr=0x00）或相机（addr=0x02）发送命令。
+ */
+int cammon_send_packet(const char* host, int port,
+                       uint8_t addr, uint8_t func, uint8_t ctrl,
+                       const uint8_t* payload, int payload_len,
+                       uint8_t* resp_buf, int resp_buf_len,
+                       int timeout_ms);
+
+
+/**
  * @brief 发送舵机控制命令
  * 
  * @param host 目标主机 IP 地址
