@@ -76,24 +76,37 @@ enum DeviceAddress : uint8_t {
     ADDR_ENV_CTRL   = 0x04, ///< 环境控制器地址
     ADDR_SERVO      = 0x05  ///< 舵机控制器地址
 };
+/**
+ * @brief 可见光相机功能位（功能码）
+ *
+ * 对应协议 v0.07 中相机功能定义（表 3-5 / 3-6）。
+ * 每个功能码指出上位机要相机执行的高层操作，
+ * 具体的数据字段布局见协议文档相应条目。
+ */
 enum VisibleCameraFunction : uint8_t {
-    VC_FUNC_CONTINUOUS_ZOOM = 0x01,
-    VC_FUNC_STEP_ZOOM = 0x02,
-    VC_FUNC_CONTINUOUS_FOCUS = 0x03,
-    VC_FUNC_SINGLE_STEP_FOCUS = 0x04,
-    VC_FUNC_AUTO_FOCUS = 0x05,
-    VC_FUNC_FOCAL_DIRECT = 0x06,
-    VC_FUNC_FOCUS_DIRECT = 0x07,
-    VC_FUNC_DEFOG = 0x08,
-    VC_FUNC_BRIGHTNESS = 0x09,
-    VC_FUNC_CONTRAST = 0x0A,
-    VC_FUNC_IMAGE_ENHANCE = 0x0B
+    VC_FUNC_CONTINUOUS_ZOOM      = 0x01, ///< 连续变焦（data[0] = 速度，范围 0-10）
+    VC_FUNC_STEP_ZOOM            = 0x02, ///< 步进变焦（data[0] = 步距，范围 0-10）
+    VC_FUNC_CONTINUOUS_FOCUS     = 0x03, ///< 连续调焦（data[0] = 速度，范围 0-10）
+    VC_FUNC_SINGLE_STEP_FOCUS    = 0x04, ///< 单步调焦（data[0] = 步距，范围 0-10）
+    VC_FUNC_AUTO_FOCUS           = 0x05, ///< 自动聚焦（触发式或状态式，见 control 含义）
+    VC_FUNC_FOCAL_DIRECT         = 0x06, ///< 焦距直达（data 中为目标焦距，float 小端）
+    VC_FUNC_FOCUS_DIRECT         = 0x07, ///< 聚焦直达（data 中为目标聚焦值，float 或指定格式）
+    VC_FUNC_DEFOG                = 0x08, ///< 光学透雾 / 去雾（data[0]：0 关、1 开）
+    VC_FUNC_BRIGHTNESS           = 0x09, ///< 亮度调整（data[0] 表示增减或直达值，详见协议）
+    VC_FUNC_CONTRAST             = 0x0A, ///< 对比度调整
+    VC_FUNC_IMAGE_ENHANCE        = 0x0B  ///< 图像增强
 };
 
+/**
+ * @brief 相机控制位（Control 值的常用含义）
+ *
+ * 协议中 control 字节的含义依功能而异；此处列出常见值的语义，
+ * 示例：对变焦/调焦类功能，0x01 常用于“+”（增加），0x00 常用于“停/减”。
+ */
 enum CameraControl : uint8_t {
-    CAM_CTRL_STOP = 0x00,
-    CAM_CTRL_CONT_PLUS = 0x01,
-    CAM_CTRL_CONT_MINUS = 0x02
+    CAM_CTRL_STOP         = 0x00, ///< 停止 / 关闭 / 或作为“减/停止”的通用编码
+    CAM_CTRL_CONT_PLUS    = 0x01, ///< 连续/步进操作的“增加 / 向正”控制
+    CAM_CTRL_CONT_MINUS   = 0x02  ///< 连续/步进操作的“减少 / 向负”控制
 };
 
 
