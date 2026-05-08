@@ -58,6 +58,7 @@ int cammon_send_camera_command(const char* host, int port, uint8_t func, uint8_t
  * @return 成功返回接收到的字节数，失败返回负 error code
  */
 int cammon_send_servo_command(const char* host, int port, float az, float el, float azs, float els, uint16_t target_distance, uint8_t seq, uint8_t control, uint8_t device_type, uint8_t packet_type, uint8_t* resp_buf, int resp_buf_len, int timeout_ms);
+int cammon_send_packet(const char* host, int port, uint8_t addr, uint8_t func, uint8_t ctrl, const uint8_t* payload, int payload_len, uint8_t* resp_buf, int resp_buf_len, int timeout_ms);
 }
 
 // singleton controller instance managed by JNI
@@ -240,6 +241,7 @@ JNIEXPORT jint JNICALL Java_com_marble_cammon_CamMonNative_setPTZ(JNIEnv* env, j
     int r = cam_controller_set_ptz(g_controller, host, (int)port, (float)az, (float)el, (float)azs, (float)els, (uint16_t)targetDistance, (uint8_t)seq, (uint8_t)control, (uint8_t)deviceType, (uint8_t)packetType, resp.get(), RESP_MAX, (int)timeoutMs);
     env->ReleaseStringUTFChars(jhost, host);
     return r;
+}
 // JNI wrapper for generic sendPacket
 JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendPacket(JNIEnv* env, jclass, jstring jhost, jint port, jbyte addr, jbyte func, jbyte ctrl, jbyteArray jpayload, jint timeoutMs) {
     const char* host = env->GetStringUTFChars(jhost, NULL);
@@ -252,8 +254,6 @@ JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendPacket(JNIE
     jbyteArray out = env->NewByteArray(r);
     env->SetByteArrayRegion(out, 0, r, reinterpret_cast<jbyte*>(resp.get()));
     return out;
-}
-
 }
 
 } // extern "C"

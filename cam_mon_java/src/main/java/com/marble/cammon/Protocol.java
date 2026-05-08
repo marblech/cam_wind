@@ -86,9 +86,9 @@ public class Protocol {
     public static final byte DEFAULT_MOVE_AMOUNT = 0x0A;
 
     public static byte computeChecksum(byte[] data) {
-        byte cs = 0;
-        for (byte b : data) cs ^= b;
-        return cs;
+        int sum = 0;
+        for (byte b : data) sum = (sum + (b & 0xFF)) & 0xFF;
+        return (byte)sum;
     }
 
     public static byte[] buildCommand(byte addr, byte func, byte ctrl, byte[] payload) {
