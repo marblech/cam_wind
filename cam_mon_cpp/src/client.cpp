@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
         // build a sample visible-camera command: e.g., function 0x01 control 0x01 with small payload
         std::vector<uint8_t> payload(15, 0x00);
         payload[0] = 5; // example: continuous zoom speed
-        Packet p = make_camera_command(/*func=*/0x01, /*ctrl=*/0x01, payload);
+        Packet p = make_camera_command(static_cast<uint8_t>(VisibleCameraFunction::VC_FUNC_CONTINUOUS_ZOOM), static_cast<uint8_t>(CameraControl::CAM_CTRL_CONT_PLUS), payload);
         auto out = p.serialize();
         ssize_t sent = sendto(sock, out.data(), out.size(), 0, (sockaddr*)&serv, sizeof(serv));
         if (sent < 0) { perror("sendto"); return 1; }
