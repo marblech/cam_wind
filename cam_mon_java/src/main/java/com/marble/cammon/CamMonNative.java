@@ -53,6 +53,12 @@ public class CamMonNative {
     public static native byte[] sendCameraCommand(String host, int port, byte func, byte ctrl, byte[] payload, int timeoutMs);
 
     /**
+     * Send a generic protocol packet (specify address, func, ctrl).
+     * Useful for sending commands to tracker (addr=0x00) or other devices.
+     */
+    public static native byte[] sendPacket(String host, int port, byte addr, byte func, byte ctrl, byte[] payload, int timeoutMs);
+
+    /**
      * @brief 发送舵机控制命令（原生接口）
      * 
      * 调用底层 C++ 库发送舵机控制命令到指定设备。
