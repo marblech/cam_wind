@@ -76,6 +76,26 @@ enum DeviceAddress : uint8_t {
     ADDR_ENV_CTRL   = 0x04, ///< 环境控制器地址
     ADDR_SERVO      = 0x05  ///< 舵机控制器地址
 };
+enum VisibleCameraFunction : uint8_t {
+    VC_FUNC_CONTINUOUS_ZOOM = 0x01,
+    VC_FUNC_STEP_ZOOM = 0x02,
+    VC_FUNC_CONTINUOUS_FOCUS = 0x03,
+    VC_FUNC_SINGLE_STEP_FOCUS = 0x04,
+    VC_FUNC_AUTO_FOCUS = 0x05,
+    VC_FUNC_FOCAL_DIRECT = 0x06,
+    VC_FUNC_FOCUS_DIRECT = 0x07,
+    VC_FUNC_DEFOG = 0x08,
+    VC_FUNC_BRIGHTNESS = 0x09,
+    VC_FUNC_CONTRAST = 0x0A,
+    VC_FUNC_IMAGE_ENHANCE = 0x0B
+};
+
+enum CameraControl : uint8_t {
+    CAM_CTRL_STOP = 0x00,
+    CAM_CTRL_CONT_PLUS = 0x01,
+    CAM_CTRL_CONT_MINUS = 0x02
+};
+
 
 // ============================================================================
 // 标准数据包结构
