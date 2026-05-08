@@ -2,10 +2,21 @@
 #include "protocol.h"
 #include "cammon_api.h"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+typedef int socklen_t;
+using ssize_t = int;
+#else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -76,6 +87,14 @@ static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
 
 static void listener_loop(CamController* c) {
     // create socket and bind
+#ifdef _WIN32
+    static bool winsock_inited = false;
+    if (!winsock_inited) {
+        WSADATA wsa;
+        WSAStartup(MAKEWORD(2,2), &wsa);
+        winsock_inited = true;
+    }
+#endif
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
         perror("cam_controller socket");
@@ -90,18 +109,26 @@ static void listener_loop(CamController* c) {
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(c->listen_port);
 
-    if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("cam_controller bind");
+    #ifdef _WIN32
+        closesocket(sock);
+    #else
         close(sock);
+    #endif
         c->sock = -1;
         return;
-    }
+        }
 
     // set recv timeout so we can check running flag periodically
     timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
+#ifdef _WIN32
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+#else
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
 
     std::cerr << "[CamController] Listening on UDP port " << c->listen_port << "\n";
 
@@ -109,7 +136,7 @@ static void listener_loop(CamController* c) {
         std::vector<uint8_t> buf(2048);
         sockaddr_in src;
         socklen_t slen = sizeof(src);
-        ssize_t n = recvfrom(sock, buf.data(), (socklen_t)buf.size(), 0, (struct sockaddr*)&src, &slen);
+        ssize_t n = recvfrom(sock, reinterpret_cast<char*>(buf.data()), (socklen_t)buf.size(), 0, (struct sockaddr*)&src, &slen);
         if (n < 0) {
             // timeout or error, continue if running
             continue;
@@ -124,7 +151,11 @@ static void listener_loop(CamController* c) {
         parse_and_log_status(buf);
     }
 
+#ifdef _WIN32
+    closesocket(sock);
+#else
     close(sock);
+#endif
     c->sock = -1;
     std::cerr << "[CamController] Listener exiting\n";
 }
@@ -159,11 +190,15 @@ void cam_controller_stop(CamController* h) {
     if (!h) return;
     if (!h->running.load()) return;
     h->running.store(false);
-    if (h->sock >= 0) {
+        if (h->sock >= 0) {
         // closing socket will interrupt recvfrom
+    #ifdef _WIN32
+        closesocket(h->sock);
+    #else
         close(h->sock);
+    #endif
         h->sock = -1;
-    }
+        }
     if (h->thr.joinable()) h->thr.join();
 }
 

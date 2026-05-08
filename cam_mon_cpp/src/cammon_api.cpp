@@ -23,6 +23,10 @@
 #include <string>
 #include <vector>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // ============================================================================
 // Windows 平台 Winsock 初始化辅助
 // ============================================================================
@@ -76,7 +80,12 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
         return -2;
     }
     int s = sendto(sock, reinterpret_cast<const char*>(outbuf), outlen, 0, (sockaddr*)&serv, sizeof(serv));
-    if (s == SOCKET_ERROR) { closesocket(sock); return -3; }
+    if (s == SOCKET_ERROR) {
+        int err = WSAGetLastError();
+        fprintf(stderr, "[cammon_api] sendto failed, WSAGetLastError=%d\n", err);
+        closesocket(sock);
+        return -3 - err;
+    }
     if (timeout_ms > 0) {
         timeval tv; tv.tv_sec = timeout_ms / 1000; tv.tv_usec = (timeout_ms % 1000) * 1000;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
@@ -84,7 +93,12 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
     }
     sockaddr_in peer{}; socklen_t plen = sizeof(peer);
     int n = recvfrom(sock, reinterpret_cast<char*>(inbuf), inbuf_len, 0, (sockaddr*)&peer, &plen);
-    if (n == SOCKET_ERROR) { int e = WSAGetLastError(); closesocket(sock); return -10 - e; }
+    if (n == SOCKET_ERROR) {
+        int e = WSAGetLastError();
+        fprintf(stderr, "[cammon_api] recvfrom failed, WSAGetLastError=%d\n", e);
+        closesocket(sock);
+        return -10 - e;
+    }
     closesocket(sock); return n;
 #else
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -92,11 +106,11 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
     sockaddr_in serv{}; serv.sin_family = AF_INET; serv.sin_port = htons(port);
     if (inet_pton(AF_INET, host, &serv.sin_addr) != 1) { close(sock); return -2; }
     ssize_t s = sendto(sock, outbuf, outlen, 0, (sockaddr*)&serv, sizeof(serv));
-    if (s < 0) { close(sock); return -3; }
+    if (s < 0) { perror("[cammon_api] sendto"); close(sock); return -3; }
     if (timeout_ms > 0) { timeval tv; tv.tv_sec = timeout_ms / 1000; tv.tv_usec = (timeout_ms % 1000) * 1000; setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)); }
     sockaddr_in peer{}; socklen_t plen = sizeof(peer);
     ssize_t n = recvfrom(sock, inbuf, inbuf_len, 0, (sockaddr*)&peer, &plen);
-    if (n < 0) { int e = errno; close(sock); return -10 - e; }
+    if (n < 0) { int e = errno; perror("[cammon_api] recvfrom"); close(sock); return -10 - e; }
     close(sock); return (int)n;
 #endif
 }
@@ -141,3 +155,7 @@ int cammon_send_servo_command(const char* host, int port, float az, float el, fl
     }
     return result;
 }
+
+#ifdef __cplusplus
+}
+#endif

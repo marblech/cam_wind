@@ -3,6 +3,9 @@
 #include "cammon_api.h"  // 底层 API 声明
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
@@ -12,6 +15,12 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
+#endif
+
+#ifdef _WIN32
+#ifndef ssize_t
+using ssize_t = int;
+#endif
 #endif
 
 #include <cstring>
@@ -267,7 +276,7 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_spe
     rtv.tv_usec = 500000;  // 500ms
     setsockopt(cmd_sock_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&rtv), sizeof(rtv));
     
-    ssize_t n = recvfrom(cmd_sock_, buf, sizeof(buf), 0, reinterpret_cast<sockaddr*>(&peer), &plen);
+    ssize_t n = recvfrom(cmd_sock_, reinterpret_cast<char*>(buf), sizeof(buf), 0, reinterpret_cast<sockaddr*>(&peer), &plen);
     
     // 恢复原始超时
     struct timeval orig_tv;
@@ -387,7 +396,7 @@ void CamAJFLib::status_listener_thread() {
         rtv.tv_usec = 100000;  // 100ms
         setsockopt(status_sock_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&rtv), sizeof(rtv));
         
-        ssize_t n = recvfrom(status_sock_, buf, sizeof(buf), 0, reinterpret_cast<sockaddr*>(&src), &slen);
+        ssize_t n = recvfrom(status_sock_, reinterpret_cast<char*>(buf), sizeof(buf), 0, reinterpret_cast<sockaddr*>(&src), &slen);
         
         if (n < 0) {
             // 超时或错误，继续循环

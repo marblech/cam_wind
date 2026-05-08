@@ -16,6 +16,16 @@
 extern "C" {
 #endif
 
+#if defined(_WIN32)
+#if defined(CAMMON_EXPORTS)
+#define CAMMON_API __declspec(dllexport)
+#else
+#define CAMMON_API __declspec(dllimport)
+#endif
+#else
+#define CAMMON_API
+#endif
+
 /**
  * @brief 发送 UDP 数据包并等待接收响应
  * 
@@ -28,7 +38,7 @@ extern "C" {
  * @param timeout_ms 超时时间（毫秒），0 表示使用默认超时
  * @return 成功时返回接收到的字节数（>0），失败返回负 error code
  */
-int cammon_send_udp_and_recv(const char* host, int port, 
+CAMMON_API int cammon_send_udp_and_recv(const char* host, int port, 
                               const uint8_t* outbuf, int outlen,
                               uint8_t* inbuf, int inbuf_len, 
                               int timeout_ms);
@@ -47,7 +57,7 @@ int cammon_send_udp_and_recv(const char* host, int port,
  * @param timeout_ms 超时时间（毫秒）
  * @return 成功时返回接收到的字节数（>0），失败返回负 error code
  */
-int cammon_send_camera_command(const char* host, int port, 
+CAMMON_API int cammon_send_camera_command(const char* host, int port, 
                                 uint8_t func, uint8_t ctrl,
                                 const uint8_t* payload, int payload_len,
                                 uint8_t* resp_buf, int resp_buf_len, 
@@ -59,7 +69,7 @@ int cammon_send_camera_command(const char* host, int port,
  * 构建一个标准帧（0x0F 0xF0 ... 0xF0 0x0F），并发送到目标主机。
  * 可用于向跟踪处理器（addr=0x00）或相机（addr=0x02）发送命令。
  */
-int cammon_send_packet(const char* host, int port,
+CAMMON_API int cammon_send_packet(const char* host, int port,
                        uint8_t addr, uint8_t func, uint8_t ctrl,
                        const uint8_t* payload, int payload_len,
                        uint8_t* resp_buf, int resp_buf_len,
@@ -85,7 +95,7 @@ int cammon_send_packet(const char* host, int port,
  * @param timeout_ms 超时时间（毫秒）
  * @return 成功时返回接收到的字节数（>0），失败返回负 error code
  */
-int cammon_send_servo_command(const char* host, int port,
+CAMMON_API int cammon_send_servo_command(const char* host, int port,
                                float az, float el, float azs, float els,
                                uint16_t target_distance, uint8_t seq, 
                                uint8_t control, uint8_t device_type, 

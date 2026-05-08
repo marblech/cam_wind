@@ -83,7 +83,11 @@ install(FILES ${CAMMON_HEADERS} DESTINATION ${CMAKE_INSTALL_PREFIX}/include/camm
 # ============================================================================
 add_executable(cam_mon_crosshair_test src/test_crosshair.cpp)
 # Link with cammon shared library
-target_link_libraries(cam_mon_crosshair_test PRIVATE cammon pthread)
+if(WIN32)
+    target_link_libraries(cam_mon_crosshair_test PRIVATE cammon)
+else()
+    target_link_libraries(cam_mon_crosshair_test PRIVATE cammon pthread)
+endif()
 set_target_properties(cam_mon_crosshair_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
 )

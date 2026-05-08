@@ -8,6 +8,9 @@
   <properties>
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
+    <!-- Default native library directory and path separator (Linux/Unix defaults) -->
+    <native.dir>${project.basedir}/../cam_mon_cpp/build</native.dir>
+    <path.separator>:</path.separator>
   </properties>
   <dependencies>
     <dependency>
@@ -25,14 +28,34 @@
   </dependencies>
   <build>
     <plugins>
-      <plugin>
+        <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.0.0-M7</version>
         <configuration>
-          <argLine>-Djava.library.path=${project.basedir}/../cam_mon_cpp/build</argLine>
+            <!-- Use cross-platform properties; overridden by Windows profile -->
+            <argLine>-Djava.library.path=${native.dir}</argLine>
+            <environmentVariables>
+              <PATH>${native.dir}${path.separator}${env.PATH}</PATH>
+            </environmentVariables>
         </configuration>
       </plugin>
     </plugins>
   </build>
+
+  <!-- Platform-specific profile: Windows uses build/Debug and ';' path separator -->
+  <profiles>
+    <profile>
+      <id>windows</id>
+      <activation>
+        <os>
+          <family>Windows</family>
+        </os>
+      </activation>
+      <properties>
+        <native.dir>${project.basedir}/../cam_mon_cpp/build/Debug</native.dir>
+        <path.separator>;</path.separator>
+      </properties>
+    </profile>
+  </profiles>
 </project>
