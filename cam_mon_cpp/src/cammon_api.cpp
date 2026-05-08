@@ -205,6 +205,24 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
 /// if (n > 0) { /* 处理响应 */ }
 /// @endcode
 int cammon_send_camera_command(const char* host, int port, uint8_t func, uint8_t ctrl, const uint8_t* payload, int payload_len, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
+    // keep existing behavior: build camera command with fixed camera address
+    cammon::Packet p = cammon::make_camera_command(func, ctrl, std::vector<uint8_t>(payload ? payload : nullptr, payload ? payload + payload_len : nullptr));
+    auto out = p.serialize();
+    int result = cammon_send_udp_and_recv(host, port, out.data(), (int)out.size(), resp_buf, resp_buf_len, timeout_ms);
+    return result;
+}
+
+// New: send generic packet with explicit addr
+int cammon_send_packet(const char* host, int port, uint8_t addr, uint8_t func, uint8_t ctrl, const uint8_t* payload, int payload_len, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
+    cammon::Packet p;
+    p.addr = addr;
+    p.func = func;
+    p.ctrl = ctrl;
+    if (payload && payload_len > 0) p.data = std::vector<uint8_t>(payload, payload + payload_len);
+    auto out = p.serialize();
+    int result = cammon_send_udp_and_recv(host, port, out.data(), (int)out.size(), resp_buf, resp_buf_len, timeout_ms);
+    return result;
+}
     // 调试输出：发送参数
     fprintf(stderr, "[C++ DEBUG] cammon_send_camera_command: host=%s port=%d func=%d ctrl=%d payload_len=%d timeout=%d\n", 
         host, port, func, ctrl, payload_len, timeout_ms);
