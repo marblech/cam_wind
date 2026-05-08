@@ -28,21 +28,21 @@ public class CrosshairControlTest {
         byte[] payload = new byte[15];
         payload[0] = 0x0A;
 
-        // Up (ctrl 0x02)
-        byte[] respUp = CamMonNative.sendPacket("127.0.0.1", port, (byte)0x00, (byte)0x01, (byte)0x02, payload, 1000);
+        // Up (ctrl TRACKER_CTRL_UP)
+        byte[] respUp = CamMonNative.sendPacket("127.0.0.1", port, Protocol.ADDR_TRACK_VIS, Protocol.TRACKER_FUNC_CROSSHAIR_SHOW, Protocol.TRACKER_CTRL_UP, payload, 1000);
         assertNotNull(respUp, "Up response should not be null");
         assertTrue(respUp.length >= 23, "Up response should have minimum length");
 
-        // Down (ctrl 0x03)
-        byte[] respDown = CamMonNative.sendPacket("127.0.0.1", port, (byte)0x00, (byte)0x01, (byte)0x03, payload, 1000);
+        // Down
+        byte[] respDown = CamMonNative.sendPacket("127.0.0.1", port, Protocol.ADDR_TRACK_VIS, Protocol.TRACKER_FUNC_CROSSHAIR_SHOW, Protocol.TRACKER_CTRL_DOWN, payload, 1000);
         assertNotNull(respDown);
 
-        // Left (ctrl 0x04)
-        byte[] respLeft = CamMonNative.sendPacket("127.0.0.1", port, (byte)0x00, (byte)0x01, (byte)0x04, payload, 1000);
+        // Left
+        byte[] respLeft = CamMonNative.sendPacket("127.0.0.1", port, Protocol.ADDR_TRACK_VIS, Protocol.TRACKER_FUNC_CROSSHAIR_SHOW, Protocol.TRACKER_CTRL_LEFT, payload, 1000);
         assertNotNull(respLeft);
 
-        // Right (ctrl 0x05)
-        byte[] respRight = CamMonNative.sendPacket("127.0.0.1", port, (byte)0x00, (byte)0x01, (byte)0x05, payload, 1000);
+        // Right
+        byte[] respRight = CamMonNative.sendPacket("127.0.0.1", port, Protocol.ADDR_TRACK_VIS, Protocol.TRACKER_FUNC_CROSSHAIR_SHOW, Protocol.TRACKER_CTRL_RIGHT, payload, 1000);
         assertNotNull(respRight);
     }
 }
