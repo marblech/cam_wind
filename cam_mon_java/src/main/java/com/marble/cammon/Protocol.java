@@ -18,6 +18,73 @@ public class Protocol {
     public static final byte ADDR_ENV_CTRL   = 0x04;
     public static final byte ADDR_SERVO      = 0x05;
 
+    // --- Visible camera functions (Protocol v0.07 table mapping)
+    public static final byte VC_FUNC_CONTINUOUS_ZOOM = 0x01;
+    public static final byte VC_FUNC_STEP_ZOOM = 0x02;
+    public static final byte VC_FUNC_CONTINUOUS_FOCUS = 0x03;
+    public static final byte VC_FUNC_SINGLE_STEP_FOCUS = 0x04;
+    public static final byte VC_FUNC_AUTO_FOCUS = 0x05;
+    public static final byte VC_FUNC_FOCAL_DIRECT = 0x06;
+    public static final byte VC_FUNC_FOCUS_DIRECT = 0x07;
+    public static final byte VC_FUNC_DEFOG = 0x08;
+    public static final byte VC_FUNC_BRIGHTNESS = 0x09;
+    public static final byte VC_FUNC_CONTRAST = 0x0A;
+    public static final byte VC_FUNC_IMAGE_ENHANCE = 0x0B;
+
+    // Camera control semantics (common values)
+    public static final byte CAM_CTRL_STOP = 0x00;
+    public static final byte CAM_CTRL_CONT_PLUS = 0x01;
+    public static final byte CAM_CTRL_CONT_MINUS = 0x02;
+    public static final byte CAM_CTRL_ZOOM = 0x05;
+    public static final byte CAM_CTRL_FOCAL = 0x06;
+
+    // Tracker functions and controls
+    public static final byte TRACKER_FUNC_DISPLAY_SWITCH = 0x00;
+    public static final byte TRACKER_FUNC_CROSSHAIR_SHOW = 0x01;
+    public static final byte TRACKER_FUNC_CROSSHAIR_UP = 0x02;
+    public static final byte TRACKER_FUNC_CROSSHAIR_DOWN = 0x03;
+    public static final byte TRACKER_FUNC_CROSSHAIR_LEFT = 0x04;
+    public static final byte TRACKER_FUNC_CROSSHAIR_RIGHT = 0x05;
+
+    public static final byte TRACKER_CTRL_SHOW = 0x01;
+    public static final byte TRACKER_CTRL_UP = 0x02;
+    public static final byte TRACKER_CTRL_DOWN = 0x03;
+    public static final byte TRACKER_CTRL_LEFT = 0x04;
+    public static final byte TRACKER_CTRL_RIGHT = 0x05;
+
+    // Detection / Recognition
+    public static final byte DETECT_FUNC_POINT_TARGET = 0x04;
+    public static final byte DETECT_FUNC_SENSITIVITY_SET = 0x02;
+    public static final byte DETECT_FUNC_DETECT_TO_TRACK_ON = 0x03;
+
+    public static final byte RECOG_FUNC_ENABLE = 0x00;
+    public static final byte RECOG_FUNC_AREA_KIND_TIME_SET = 0x01;
+    public static final byte RECOG_FUNC_SENSITIVITY_SET = 0x02;
+    public static final byte RECOG_FUNC_RECOG_TO_TRACK_ON = 0x03;
+
+    // Identification category bitmask
+    public static final byte ID_CAT_PERSON = 1 << 0;
+    public static final byte ID_CAT_VEHICLE = 1 << 1;
+    public static final byte ID_CAT_SHIP = 1 << 2;
+    public static final byte ID_CAT_AIRCRAFT = 1 << 3;
+    public static final byte ID_CAT_DRONE = 1 << 4;
+
+    // Environment control
+    public static final byte ENV_FUNC_WIPER = 0x01;
+    public static final byte ENV_FUNC_HEATER = 0x02;
+
+    // Scan functions
+    public static final byte SCAN_FUNC_SET_MODE = 0x01;
+    public static final byte SCAN_FUNC_PRESET_WRITE = 0x02;
+    public static final byte SCAN_FUNC_PRESET_READ = 0x02;
+
+    // Servo constants
+    public static final byte SERVO_CTRL_POSITION = 0x11;
+    public static final byte SERVO_DEVICE_TYPE = 0x01;
+    public static final byte SERVO_PACKET_TYPE_POINT = 0x02;
+    public static final byte DEFAULT_SEQ = 0x01;
+    public static final byte DEFAULT_MOVE_AMOUNT = 0x0A;
+
     public static byte computeChecksum(byte[] data) {
         byte cs = 0;
         for (byte b : data) cs ^= b;
