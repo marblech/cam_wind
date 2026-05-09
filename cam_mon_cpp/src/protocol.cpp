@@ -206,7 +206,7 @@ static void write_le_float(std::vector<uint8_t>& out, float f) {
  * [方位角(f)][俯仰角(f)][方位速度(f)][俯仰速度(f)][距离(u16)]
  * [保留33字节][保留2(u16)][保留2(u16)][时间戳(u32)][保留状态][备份(u16)][校验和]
  * 
- * 校验和计算: 从索引 1 到 70（不含校验和位置）的所有字节 XOR
+ * 校验和计算: 从索引 0 到 70（包含帧头 0x7E，在校验字节之前的所有字节）
  * 
  * @return std::vector<uint8_t> 72 字节序列化向量
  */
@@ -247,9 +247,9 @@ std::vector<uint8_t> ServoPacket::serialize_servo() const {
     out.push_back(reserved_state);
     write_le_uint16(out, backup);
     
-    // 计算校验和: XOR 索引 1 到 70
+    // 计算校验和: XOR 索引 0 到 70（包含帧头 0x7E）
     uint8_t cs = 0;
-    for (size_t i = 1; i < 71; ++i) cs ^= out[i];
+    for (size_t i = 0; i < 71; ++i) cs ^= out[i];
     out.push_back(cs);
     return out;
 }
@@ -261,7 +261,7 @@ std::vector<uint8_t> ServoPacket::serialize_servo() const {
  * 1. 检查缓冲区最小长度（至少 72 字节）
  * 2. 验证帧头 (0x7E)
  * 3. 解析所有字段
- * 4. 验证 XOR 校验和（索引 1 到 70）
+ * 4. 验证 XOR 校验和（索引 0 到 70）
  * 
  * @param buf 输入字节缓冲区（至少 72 字节）
  * @return std::optional<ServoPacket> 成功时返回 ServoPacket 对象，失败返回 std::nullopt
@@ -315,9 +315,9 @@ std::optional<ServoPacket> ServoPacket::deserialize_servo(const std::vector<uint
     read_le_uint16(s.backup);
     s.checksum = buf[idx++];
     
-    // 验证校验和: XOR 索引 1 到 70
+    // 验证校验和: XOR 索引 0 到 70（包含帧头 0x7E）
     uint8_t cs = 0;
-    for (size_t i = 1; i < 71; ++i) cs ^= buf[i];
+    for (size_t i = 0; i < 71; ++i) cs ^= buf[i];
     if (cs != s.checksum) return std::nullopt;
     
     return s;
