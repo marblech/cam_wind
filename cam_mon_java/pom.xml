@@ -11,6 +11,9 @@
     <!-- Default native library directory and path separator (Linux/Unix defaults) -->
     <native.dir>${project.basedir}/../cam_mon_cpp/build</native.dir>
     <path.separator>:</path.separator>
+    <!-- Ensure source files are compiled using UTF-8 encoding -->
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>
   <dependencies>
     <dependency>
@@ -28,6 +31,16 @@
   </dependencies>
   <build>
     <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.11.0</version>
+          <configuration>
+            <source>${maven.compiler.source}</source>
+            <target>${maven.compiler.target}</target>
+            <encoding>UTF-8</encoding>
+          </configuration>
+        </plugin>
         <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
