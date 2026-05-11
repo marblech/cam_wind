@@ -72,6 +72,7 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
     if (!g_winsock_initialized) ensure_winsock_init();
     SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock == INVALID_SOCKET) return -1;
+    fprintf(stderr, "[cammon_api] created socket=%d\n", (int)sock);
     sockaddr_in serv{};
     serv.sin_family = AF_INET;
     serv.sin_port = htons(port);
@@ -79,12 +80,20 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
         closesocket(sock);
         return -2;
     }
+    fprintf(stderr, "[cammon_api] target %s:%d\n", host, port);
     int s = sendto(sock, reinterpret_cast<const char*>(outbuf), outlen, 0, (sockaddr*)&serv, sizeof(serv));
     if (s == SOCKET_ERROR) {
         int err = WSAGetLastError();
         fprintf(stderr, "[cammon_api] sendto failed, WSAGetLastError=%d\n", err);
         closesocket(sock);
         return -3 - err;
+    }
+    // print local socket address/port used for send
+    sockaddr_in local{}; int llen = sizeof(local);
+    if (getsockname(sock, (sockaddr*)&local, &llen) == 0) {
+        char buf[64] = {0};
+        inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf));
+        fprintf(stderr, "[cammon_api] local bind %s:%d\n", buf, ntohs(local.sin_port));
     }
     if (timeout_ms > 0) {
         timeval tv; tv.tv_sec = timeout_ms / 1000; tv.tv_usec = (timeout_ms % 1000) * 1000;
@@ -146,6 +155,9 @@ int cammon_send_packet(const char* host, int port, uint8_t addr, uint8_t func, u
 int cammon_send_servo_command(const char* host, int port, float az, float el, float azs, float els, uint16_t target_distance, uint8_t seq, uint8_t control, uint8_t device_type, uint8_t packet_type, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
     auto out = cammon::build_servo_packet(az, el, azs, els, target_distance, seq, control, device_type, packet_type);
     fprintf(stderr, "[C++ DEBUG] Sending servo packet: size=%d\n", (int)out.size());
+    fprintf(stderr, "[C++ DEBUG] Outgoing bytes: ");
+    for (size_t i = 0; i < out.size() && i < 200; ++i) fprintf(stderr, "%02X ", out[i]);
+    fprintf(stderr, "\n");
     int result = cammon_send_udp_and_recv(host, port, out.data(), (int)out.size(), resp_buf, resp_buf_len, timeout_ms);
     fprintf(stderr, "[C++ DEBUG] cammon_send_udp_and_recv returned: %d\n", result);
     if (result > 0) {

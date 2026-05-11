@@ -25,10 +25,10 @@ public class CamMonNative {
         } catch (UnsatisfiedLinkError e) {
             System.out.println("Failed to load from library path: " + e.getMessage());
             try {
-                // 尝试从类路径中加载
-                String path = CamMonNative.class.getResource("/cammon.dll").getPath();
-                System.load(path);
-                System.out.println("Successfully loaded native library: " + path);
+                // 尝试从类路径中加载：如果 cammon.dll 被打包到 resources/native/ 下，
+                // 先将其解压到临时文件再调用 System.load
+                NativeLoader.loadFromJar("/native/cammon.dll", "cammon");
+                System.out.println("Successfully loaded native library from JAR resource: /native/cammon.dll");
             } catch (Exception ex) {
                 System.out.println("Failed to load from class path: " + ex.getMessage());
                 throw new RuntimeException("Failed to load native library cammon. Please build cam_mon_cpp first.");

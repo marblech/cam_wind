@@ -192,9 +192,9 @@ public class Protocol {
             intToLeBytes((int)timestamp, out, idx); idx +=4;
             out[idx++] = reservedState;
             shortToLeBytes((short)backup, out, idx); idx +=2;
-            // checksum: XOR of bytes from index 1 to 70
+            // checksum: XOR of bytes from index 0 to 70 (include frame header 0x7E)
             byte cs = 0;
-            for (int i=1;i<71;i++) cs ^= out[i];
+            for (int i=0;i<71;i++) cs ^= out[i];
             out[idx++] = cs;
             return out;
         }
@@ -236,8 +236,8 @@ public class Protocol {
             p.reservedState = buf[idx++];
             p.backup = leBytesToShort(buf, idx); idx +=2;
             p.checksum = buf[idx++];
-            // verify checksum
-            byte cs = 0; for (int i=1;i<71;i++) cs ^= buf[i];
+            // verify checksum (include frame header 0x7E)
+            byte cs = 0; for (int i=0;i<71;i++) cs ^= buf[i];
             if (cs != p.checksum) return null;
             return p;
         }

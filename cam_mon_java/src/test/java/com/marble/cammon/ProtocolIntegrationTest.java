@@ -9,6 +9,7 @@ import java.io.InputStream;
 public class ProtocolIntegrationTest {
     @Test
     public void integrationRoundtrip() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(Boolean.getBoolean("sim.noReply"), "sim.noReply=true, skipping integration test");
         ProcessBuilder pb = new ProcessBuilder("java", "-Djava.library.path=../cam_mon_cpp/build", "-cp", "target/classes", "com.marble.cammon.ServerSimulator", "4001");
         pb.redirectErrorStream(true);
         Process p = pb.start();

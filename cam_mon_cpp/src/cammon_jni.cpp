@@ -151,7 +151,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendCameraComma
  * @param timeoutMs 超时时间（毫秒）
  * @return 响应数据字节数组，失败返回 NULL
  */
-JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendServoCommand(JNIEnv* env, jclass, jstring jhost, jint port, jfloat az, jfloat el, jfloat azs, jfloat els, jint targetDistance, jint seq, jint control, jint timeoutMs) {
+JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendServoCommand(JNIEnv* env, jclass, jstring jhost, jint port, jfloat az, jfloat el, jfloat azs, jfloat els, jint targetDistance, jint seq, jint control, jint deviceType, jint packetType, jint timeoutMs) {
     // 获取 Java 字符串的 UTF-8 编码
     const char* host = env->GetStringUTFChars(jhost, NULL);
     
@@ -164,8 +164,8 @@ JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_sendServoComman
     // 默认 device_type = 0x01（舵机控制器），packet_type = 0x02（定点报告）
     int r = cammon_send_servo_command(host, port, az, el, azs, els, 
                                       (uint16_t)targetDistance, (uint8_t)seq, 
-                                      (uint8_t)control, /*device_type*/0x01, 
-                                      /*packet_type*/0x02, resp.get(), RESP_MAX, timeoutMs);
+                                      (uint8_t)control, (uint8_t)deviceType, 
+                                      (uint8_t)packetType, resp.get(), RESP_MAX, timeoutMs);
     
     // 释放 Java 字符串
     env->ReleaseStringUTFChars(jhost, host);

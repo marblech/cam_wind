@@ -66,7 +66,7 @@ public class Client {
         } else {
             // call native servo sender
             System.out.println("Sending servo command via native C++ library...");
-            byte[] resp = CamMonNative.sendServoCommand(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, 0x01, 0x20, 2000);
+            byte[] resp = CamMonNative.sendServoCommand(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, 0x01, 0x02, 2000);
             if (resp == null) { System.err.println("No servo response or error"); return; }
             System.out.println("Received " + resp.length + " bytes from native: " + bytesToHex(resp));
             Protocol.ServoPacket parsed = Protocol.ServoPacket.parseServo(resp);
