@@ -36,3 +36,7 @@ desktop.ini
 *.tmp
 *.temp
 *~
+
+build/
+build/*
+build/**
