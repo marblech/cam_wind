@@ -51,6 +51,39 @@ static constexpr uint8_t FRAME_TAIL1 = 0xF0;
  */
 static constexpr uint8_t FRAME_TAIL2 = 0x0F;
 
+// ---------------------------------------------------------------------------
+// 上报帧头/帧尾常量 (协议 3.4 节)
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief 上报帧头字节1
+ * 
+ * 用于设备回送给综合显控软件的上报帧起始标志。
+ * 协议文档 3.4 节定义：帧头为 0x1F 0xF1
+ */
+static constexpr uint8_t REPORT_HDR1 = 0x1F;
+
+/**
+ * @brief 上报帧头字节2
+ * 
+ * 与 REPORT_HDR1 一起构成上报帧头 0x1F 0xF1
+ */
+static constexpr uint8_t REPORT_HDR2 = 0xF1;
+
+/**
+ * @brief 上报帧尾字节1
+ * 
+ * 上报帧的尾部标志，与 REPORT_TAIL2 一起构成 0xF1 0x1F
+ */
+static constexpr uint8_t REPORT_TAIL1 = 0xF1;
+
+/**
+ * @brief 上报帧尾字节2
+ * 
+ * 与 REPORT_TAIL1 一起构成上报帧尾 0xF1 0x1F
+ */
+static constexpr uint8_t REPORT_TAIL2 = 0x1F;
+
 /**
  * @brief 大多数消息的默认数据长度
  * 
@@ -74,8 +107,42 @@ enum DeviceAddress : uint8_t {
     ADDR_CAMERA_VIS = 0x02, ///< 可见光相机地址
     ADDR_CAMERA_IR  = 0x03, ///< 红外相机地址
     ADDR_ENV_CTRL   = 0x04, ///< 环境控制器地址
-    ADDR_SERVO      = 0x05  ///< 舵机控制器地址
+    ADDR_SERVO      = 0x05, ///< 舵机控制器地址
+    ADDR_SCAN       = 0x06, ///< 扫描生成器地址
+    ADDR_OSD        = 0x07  ///< OSD实时信息地址
 };
+
+// ---------------------------------------------------------------------------
+// 上报帧地址位定义 (协议 3.4.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief 上报帧地址位：识别信息
+ * 
+ * 协议 3.4.2 节定义：地址位为 0x02，表示识别信息上报
+ */
+static constexpr uint8_t REPORT_ADDR_DETECT_INFO = 0x02;
+
+/**
+ * @brief 上报帧地址位：跟踪信息
+ * 
+ * 协议 3.4.3 节定义：地址位为 0x03，表示跟踪信息上报
+ */
+static constexpr uint8_t REPORT_ADDR_TRACK_INFO = 0x03;
+
+/**
+ * @brief 上报帧地址位：负载状态（白光通道）
+ * 
+ * 协议 3.4.1 节定义：地址位 0x00 表示白光通道负载状态上报
+ */
+static constexpr uint8_t REPORT_ADDR_LOAD_STATUS_VIS = 0x00;
+
+/**
+ * @brief 上报帧地址位：负载状态（红外通道）
+ * 
+ * 协议 3.4.1 节定义：地址位 0x01 表示红外通道负载状态上报
+ */
+static constexpr uint8_t REPORT_ADDR_LOAD_STATUS_IR = 0x01;
 /**
  * @brief 可见光相机功能位（功能码）
  *
@@ -118,6 +185,128 @@ static constexpr uint8_t SERVO_DEVICE_TYPE = 0x01;    ///< 舵机设备类型
 static constexpr uint8_t SERVO_PACKET_TYPE_POINT = 0x02; ///< 定点报文类型
 static constexpr uint8_t DEFAULT_MOVE_AMOUNT = 0x0A; ///< 默认移动量（十字线等）
 
+
+// ============================================================================
+// 负载状态上报数据结构 (协议 3.4.1)
+// ============================================================================
+
+/**
+ * @brief 负载状态上报数据长度
+ * 
+ * 协议 3.4.1 节定义：数据位包含 41 字节（字节号 0~40，对应参数帧头0-1到当前检测/识别阈值41）
+ */
+static constexpr size_t REPORT_LOAD_STATUS_DATA_LEN = 41;
+
+/**
+ * @brief 负载状态上报总帧长
+ * 
+ * 2(帧头) + 1(地址) + 2(帧序号) + 41(数据) + 1(校验) + 2(帧尾) = 49 字节
+ */
+static constexpr size_t REPORT_LOAD_STATUS_FRAME_LEN = 49;
+
+/**
+ * @brief 负载状态上报数据结构
+ * 
+ * 对应协议 3.4.1 节 "负载状态上报" 定义。
+ * 帧格式: [1F F1][地址][帧序号][数据41字节][校验][F1 1F]
+ * 
+ * 数据位各字段定义（字节号从0开始）：
+ * - [0-1]: 帧头 0x1F 0xF1
+ * - [2]: 地址位 (0x00白光通道/0x01红外通道)
+ * - [3-4]: 帧序号
+ * - [5]: 保留
+ * - [6-9]: 红外焦距 (float)
+ * - [10-13]: 白光焦距 (float)
+ * - [14-17]: 方位脱靶量 (float)
+ * - [18-21]: 俯仰脱靶量 (float)
+ * - [22-25]: 环控设备状态 (4字节，01**02**格式)
+ * - [26-29]: 伺服方位角 (float)
+ * - [30-33]: 伺服俯仰角 (float)
+ * - [34]: 自检状态 (Bit0=0分系统, Bit1=相机, Bit2=跟踪处理器, Bit3=自检结束标志)
+ * - [35]: 可见光摄像机图像状态 (00=有图像, 01=无图像)
+ * - [36]: 可见光摄像机通信状态 (00=有通信, 01=无通信)
+ * - [37]: 跟踪处理器温度 (摄氏度)
+ * - [38]: 可见光摄像机温度 (摄氏度)
+ * - [39]: 电子放大状态 (00=无变倍, 01=2X, 02=4X)
+ * - [40]: 电子透雾状态 (00=无效, 01=有效)
+ * - [41]: 当前曝光时间 (0.1毫秒)
+ * - [42]: 当前检测/识别阈值 (0-100)
+ * - [43]: 当前跟踪阈值 (0-100)
+ * - [44-45]: 当前记忆跟踪时间 (毫秒)
+ */
+struct LoadStatusReport {
+    uint8_t hdr1 = REPORT_HDR1;              ///< 帧头字节1 (固定为 0x1F)
+    uint8_t hdr2 = REPORT_HDR2;              ///< 帧头字节2 (固定为 0xF1)
+    uint8_t addr = 0;                        ///< 地址位 (0x00=白光通道, 0x01=红外通道)
+    uint16_t frame_seq = 0;                  ///< 帧序号 (0x0000-0xFFFF)
+    
+    // 数据区字段
+    uint8_t reserved1 = 0;                   ///< [5] 保留
+    float ir_focal_length = 0.0f;            ///< [6-9] 红外焦距 (float)
+    float vis_focal_length = 0.0f;           ///< [10-13] 白光焦距 (float)
+    float az_aberration = 0.0f;              ///< [14-17] 方位脱靶量 (float)
+    float el_aberration = 0.0f;              ///< [18-21] 俯仰脱靶量 (float)
+    
+    // 环控设备状态 (4字节)
+    uint8_t env_ctrl_byte1 = 0;              ///< [22] 环控设备1状态字节
+    uint8_t env_ctrl_byte2 = 0;              ///< [23] 环控设备2状态字节
+    uint8_t env_ctrl_byte3 = 0;              ///< [24] 环控设备3状态字节
+    uint8_t env_ctrl_byte4 = 0;              ///< [25] 环控设备4状态字节
+    
+    float servo_azimuth = 0.0f;              ///< [26-29] 伺服方位角 (float)
+    float servo_elevation = 0.0f;            ///< [30-33] 伺服俯仰角 (float)
+    
+    // 自检状态
+    uint8_t self_check_status = 0;           ///< [34] 自检状态
+    //   Bit0: 0=分系统正常, 1=异常
+    //   Bit1: 0=相机正常, 1=异常
+    //   Bit2: 0=跟踪处理器正常, 1=异常
+    //   Bit3: 0=自检结束, 1=自检中
+    //   Bit4-7: 备用
+    
+    uint8_t vis_cam_image_status = 0;        ///< [35] 可见光摄像机图像状态 (00=有图像, 01=无图像)
+    uint8_t vis_cam_comm_status = 0;         ///< [36] 可见光摄像机通信状态 (00=有通信, 01=无通信)
+    uint8_t tracker_temp = 0;                ///< [37] 跟踪处理器温度 (摄氏度)
+    uint8_t vis_cam_temp = 0;                ///< [38] 可见光摄像机温度 (摄氏度)
+    uint8_t electronic_zoom_status = 0;      ///< [39] 电子放大状态 (00=无变倍, 01=2X, 02=4X)
+    uint8_t defog_status = 0;                ///< [40] 电子透雾状态 (00=无效, 01=有效)
+    uint8_t current_exposure = 0;            ///< [41] 当前曝光时间 (0.1毫秒)
+    uint8_t detect_recog_threshold = 0;      ///< [42] 当前检测/识别阈值 (0-100)
+    uint8_t track_threshold = 0;             ///< [43] 当前跟踪阈值 (0-100)
+    uint16_t memory_track_time = 0;          ///< [44-45] 当前记忆跟踪时间 (毫秒)
+    
+    uint8_t checksum = 0;                    ///< 校验和 (地址位到数据位和校验取低位1字节)
+    uint8_t tail1 = REPORT_TAIL1;            ///< 帧尾字节1 (固定为 0xF1)
+    uint8_t tail2 = REPORT_TAIL2;            ///< 帧尾字节2 (固定为 0x1F)
+    
+    /**
+     * @brief 将负载状态上报数据序列化为字节流
+     * 
+     * 序列化格式: [1F F1][地址][帧序号][数据41字节][校验][F1 1F]
+     * 总长度: 49 字节
+     * 
+     * @return std::vector<uint8_t> 序列化后的字节向量
+     */
+    std::vector<uint8_t> serialize() const;
+    
+    /**
+     * @brief 从字节流反序列化负载状态上报数据
+     * 
+     * @param buf 输入字节缓冲区 (至少 49 字节)
+     * @return std::optional<LoadStatusReport> 成功时返回解析好的对象，失败返回 std::nullopt
+     */
+    static std::optional<LoadStatusReport> deserialize(const std::vector<uint8_t>& buf);
+};
+
+/**
+ * @brief 从字节流反序列化负载状态上报数据
+ * 
+ * 便捷函数，封装 LoadStatusReport::deserialize 并自动验证帧头帧尾。
+ * 
+ * @param buf 输入字节缓冲区
+ * @return std::optional<LoadStatusReport> 成功时返回解析好的负载状态上报数据，失败返回 std::nullopt
+ */
+std::optional<LoadStatusReport> parse_load_status_report(const std::vector<uint8_t>& buf);
 
 // ============================================================================
 // 标准数据包结构

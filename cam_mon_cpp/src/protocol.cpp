@@ -16,12 +16,17 @@ namespace cammon {
  * @param bytes 输入字节向量
  * @return uint8_t 1 字节 XOR 校验和
  */
-uint8_t compute_xor_checksum(const std::vector<uint8_t>& bytes) {
-    // NOTE: manufacturer examples use additive checksum (mod 256) over address..data.
-    // Keep function name for compatibility but implement as sum.
+uint8_t compute_checksum(const std::vector<uint8_t>& bytes) {
+    // 协议 3.2 节定义：校验位 = 除帧头帧尾外所有字节的和校验 (mod 256)
+    // 即: checksum = sum(addr, func, ctrl, data...) mod 256
     uint8_t cs = 0;
     for (auto b : bytes) cs = static_cast<uint8_t>(cs + b);
     return cs;
+}
+
+// 为兼容旧代码保留别名
+uint8_t compute_xor_checksum(const std::vector<uint8_t>& bytes) {
+    return compute_checksum(bytes);
 }
 
 // ============================================================================
@@ -52,13 +57,13 @@ std::vector<uint8_t> Packet::serialize() const {
     if (d.size() < data_len) d.resize(data_len, 0x00);
     out.insert(out.end(), d.begin(), d.end());
     
-    // 计算校验和：从地址到数据区
+    // 计算校验和：从地址到数据区（和校验 mod 256）
     std::vector<uint8_t> csrange;
     csrange.push_back(addr);
     csrange.push_back(func);
     csrange.push_back(ctrl);
     csrange.insert(csrange.end(), d.begin(), d.end());
-    uint8_t cs = compute_xor_checksum(csrange);
+    uint8_t cs = compute_checksum(csrange);
     out.push_back(cs);
     out.push_back(tail1);
     out.push_back(tail2);
@@ -110,13 +115,13 @@ std::optional<Packet> Packet::deserialize(const std::vector<uint8_t>& buf) {
                 p.data.assign(frame.begin() + idx, frame.begin() + expected_cs_idx);
                 p.checksum = frame[expected_cs_idx];
 
-                // 验证校验和（地址..数据）
+                // 验证校验和（地址..数据，和校验 mod 256）
                 std::vector<uint8_t> csrange;
                 csrange.push_back(p.addr);
                 csrange.push_back(p.func);
                 csrange.push_back(p.ctrl);
                 csrange.insert(csrange.end(), p.data.begin(), p.data.end());
-                if (compute_xor_checksum(csrange) != p.checksum) {
+                if (compute_checksum(csrange) != p.checksum) {
                     // 校验失败，继续在当前 start 下寻找下一个可能的尾
                     continue;
                 }
@@ -367,6 +372,236 @@ std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az
     s.reserved_state = 0;
     s.backup = 0;
     return s.serialize_servo();
+}
+
+} // namespace cammon
+
+// ============================================================================
+// 负载状态上报序列化/反序列化 (协议 3.4.1)
+// ============================================================================
+
+namespace cammon {
+
+/**
+ * @brief 将负载状态上报数据序列化为字节流
+ * 
+ * 序列化格式: [1F F1][地址][帧序号][数据41字节][校验][F1 1F]
+ * 总长度: 49 字节
+ * 
+ * 数据区布局（字节号从0开始，相对于数据区起始）：
+ * - [0]: 保留
+ * - [1-4]: 红外焦距 (float)
+ * - [5-8]: 白光焦距 (float)
+ * - [9-12]: 方位脱靶量 (float)
+ * - [13-16]: 俯仰脱靶量 (float)
+ * - [17-20]: 环控设备状态 (4字节)
+ * - [21-24]: 伺服方位角 (float)
+ * - [25-28]: 伺服俯仰角 (float)
+ * - [29]: 自检状态
+ * - [30]: 可见光摄像机图像状态
+ * - [31]: 可见光摄像机通信状态
+ * - [32]: 跟踪处理器温度
+ * - [33]: 可见光摄像机温度
+ * - [34]: 电子放大状态
+ * - [35]: 电子透雾状态
+ * - [36]: 当前曝光时间
+ * - [37]: 当前检测/识别阈值
+ * - [38]: 当前跟踪阈值
+ * - [39-40]: 当前记忆跟踪时间 (uint16_t)
+ * 
+ * 注意：协议文档中字节号从帧头开始计算，此处转换为相对于数据区的偏移。
+ * 协议字节号0-1为帧头，2为地址，3-4为帧序号，5开始为数据区。
+ * 
+ * @return std::vector<uint8_t> 序列化后的49字节向量
+ */
+std::vector<uint8_t> LoadStatusReport::serialize() const {
+    std::vector<uint8_t> out;
+    out.reserve(REPORT_LOAD_STATUS_FRAME_LEN);
+    
+    // 帧头
+    out.push_back(hdr1);  // 0x1F
+    out.push_back(hdr2);  // 0xF1
+    
+    // 地址位
+    out.push_back(addr);
+    
+    // 帧序号 (小端)
+    write_le_uint16(out, frame_seq);
+    
+    // 数据区 (从协议字节号5开始，对应数据区偏移0)
+    // [5] 保留
+    out.push_back(reserved1);
+    
+    // [6-9] 红外焦距 (float)
+    write_le_float(out, ir_focal_length);
+    
+    // [10-13] 白光焦距 (float)
+    write_le_float(out, vis_focal_length);
+    
+    // [14-17] 方位脱靶量 (float)
+    write_le_float(out, az_aberration);
+    
+    // [18-21] 俯仰脱靶量 (float)
+    write_le_float(out, el_aberration);
+    
+    // [22-25] 环控设备状态 (4字节)
+    out.push_back(env_ctrl_byte1);
+    out.push_back(env_ctrl_byte2);
+    out.push_back(env_ctrl_byte3);
+    out.push_back(env_ctrl_byte4);
+    
+    // [26-29] 伺服方位角 (float)
+    write_le_float(out, servo_azimuth);
+    
+    // [30-33] 伺服俯仰角 (float)
+    write_le_float(out, servo_elevation);
+    
+    // [34] 自检状态
+    out.push_back(self_check_status);
+    
+    // [35] 可见光摄像机图像状态
+    out.push_back(vis_cam_image_status);
+    
+    // [36] 可见光摄像机通信状态
+    out.push_back(vis_cam_comm_status);
+    
+    // [37] 跟踪处理器温度
+    out.push_back(tracker_temp);
+    
+    // [38] 可见光摄像机温度
+    out.push_back(vis_cam_temp);
+    
+    // [39] 电子放大状态
+    out.push_back(electronic_zoom_status);
+    
+    // [40] 电子透雾状态
+    out.push_back(defog_status);
+    
+    // [41] 当前曝光时间
+    out.push_back(current_exposure);
+    
+    // [42] 当前检测/识别阈值
+    out.push_back(detect_recog_threshold);
+    
+    // [43] 当前跟踪阈值
+    out.push_back(track_threshold);
+    
+    // [44-45] 当前记忆跟踪时间 (uint16_t 小端)
+    write_le_uint16(out, memory_track_time);
+    
+    // 校验和：地址位到数据位和校验取低位1字节
+    // 即: sum(addr, frame_seq[0], frame_seq[1], data...) mod 256
+    // 注意：协议定义"地址位到数据位和校验"，地址位之后的所有字节
+    std::vector<uint8_t> csrange;
+    csrange.push_back(addr);
+    // 帧序号已在上面以字节形式写入out，需要从out中提取
+    // out当前长度 = 2(帧头) + 1(地址) + 2(帧序号) + 41(数据) = 46
+    // 数据区从out[5]开始
+    for (size_t i = 3; i < out.size(); ++i) {
+        csrange.push_back(out[i]);
+    }
+    checksum = compute_checksum(csrange);
+    out.push_back(checksum);
+    
+    // 帧尾
+    out.push_back(tail1);  // 0xF1
+    out.push_back(tail2);  // 0x1F
+    
+    return out;
+}
+
+/**
+ * @brief 从字节流反序列化负载状态上报数据
+ * 
+ * @param buf 输入字节缓冲区 (至少 49 字节)
+ * @return std::optional<LoadStatusReport> 成功时返回解析好的对象，失败返回 std::nullopt
+ */
+std::optional<LoadStatusReport> LoadStatusReport::deserialize(const std::vector<uint8_t>& buf) {
+    if (buf.size() < REPORT_LOAD_STATUS_FRAME_LEN) return std::nullopt;
+    
+    LoadStatusReport r;
+    
+    // 验证帧头
+    if (buf[0] != REPORT_HDR1 || buf[1] != REPORT_HDR2) return std::nullopt;
+    
+    size_t idx = 2;
+    r.hdr1 = buf[idx++];
+    r.hdr2 = buf[idx++];
+    r.addr = buf[idx++];
+    
+    // 帧序号 (小端)
+    r.frame_seq = (uint16_t)buf[idx] | ((uint16_t)buf[idx+1] << 8);
+    idx += 2;
+    
+    // 数据区
+    r.reserved1 = buf[idx++];                                    // [5]
+    // [6-9] 红外焦距
+    { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.ir_focal_length, &v, 4); idx += 4; }
+    // [10-13] 白光焦距
+    { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.vis_focal_length, &v, 4); idx += 4; }
+    // [14-17] 方位脱靶量
+    { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.az_aberration, &v, 4); idx += 4; }
+    // [18-21] 俯仰脱靶量
+    { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.el_aberration, &v, 4); idx += 4; }
+    // [22-25] 环控设备
+    r.env_ctrl_byte1 = buf[idx++];
+    r.env_ctrl_byte2 = buf[idx++];
+    r.env_ctrl_byte3 = buf[idx++];
+    r.env_ctrl_byte4 = buf[idx++];
+    // [26-29] 伺服方位角
+    { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.servo_azimuth, &v, 4); idx += 4; }
+    // [30-33] 伺服俯仰角
+    { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.servo_elevation, &v, 4); idx += 4; }
+    // [34] 自检状态
+    r.self_check_status = buf[idx++];
+    // [35] 可见光摄像机图像状态
+    r.vis_cam_image_status = buf[idx++];
+    // [36] 可见光摄像机通信状态
+    r.vis_cam_comm_status = buf[idx++];
+    // [37] 跟踪处理器温度
+    r.tracker_temp = buf[idx++];
+    // [38] 可见光摄像机温度
+    r.vis_cam_temp = buf[idx++];
+    // [39] 电子放大状态
+    r.electronic_zoom_status = buf[idx++];
+    // [40] 电子透雾状态
+    r.defog_status = buf[idx++];
+    // [41] 当前曝光时间
+    r.current_exposure = buf[idx++];
+    // [42] 当前检测/识别阈值
+    r.detect_recog_threshold = buf[idx++];
+    // [43] 当前跟踪阈值
+    r.track_threshold = buf[idx++];
+    // [44-45] 记忆跟踪时间
+    r.memory_track_time = (uint16_t)buf[idx] | ((uint16_t)buf[idx+1] << 8);
+    idx += 2;
+    
+    // 校验和
+    r.checksum = buf[idx++];
+    
+    // 帧尾
+    r.tail1 = buf[idx++];
+    r.tail2 = buf[idx++];
+    
+    // 验证帧尾
+    if (r.tail1 != REPORT_TAIL1 || r.tail2 != REPORT_TAIL2) return std::nullopt;
+    
+    // 验证校验和
+    std::vector<uint8_t> csrange;
+    csrange.push_back(r.addr);
+    for (size_t i = 4; i < REPORT_LOAD_STATUS_FRAME_LEN - 3; ++i) {
+        csrange.push_back(buf[i]);
+    }
+    if (compute_checksum(csrange) != r.checksum) return std::nullopt;
+    
+    return r;
+}
+
+/**
+ * @brief 从字节流反序列化负载状态上报数据（便捷函数）
+ */
+std::optional<LoadStatusReport> parse_load_status_report(const std::vector<uint8_t>& buf) {
+    return LoadStatusReport::deserialize(buf);
 }
 
 } // namespace cammon
