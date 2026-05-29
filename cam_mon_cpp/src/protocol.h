@@ -287,7 +287,7 @@ struct LoadStatusReport {
      * 
      * @return std::vector<uint8_t> 序列化后的字节向量
      */
-    std::vector<uint8_t> serialize() const;
+    std::vector<uint8_t> serialize();
     
     /**
      * @brief 从字节流反序列化负载状态上报数据

@@ -5,15 +5,13 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 
 /**
- * C++ 客户端库测试 - Java 作为服务器，C++ 库作为客户端发送器。
+ * C++ 控制器客户端测试 - Java 作为服务器，native 控制器发送 PTZ 命令。
  * 
  * 此测试类验证以下功能：
- * 1. C++ 库可以通过 cammon_send_camera_command 成功发送 UDP 数据包
- * 2. C++ 库可以通过 cammon_send_servo_command 成功发送 UDP 数据包
- * 3. Java 服务器接收数据包并发送响应
- * 4. C++ 库可以接收响应
+ * 1. Java 服务器可接收 native 控制器发送的 PTZ 数据包
+ * 2. Java 服务器发送 ACK 后，`CamMonNative.setPTZ(...)` 可收到响应长度
  * 
- * 测试架构：Java 服务器 <- UDP <- C++ 客户端
+ * 测试架构：Java 服务器 <- UDP <- C++ 控制器客户端
  * 
  * @author marble
  * @version 1.0
@@ -67,15 +65,6 @@ public class CppClientTest {
         // Small delay to ensure server is fully bound
         Thread.sleep(200);
         
-        // Test 1: Camera command
-        System.out.println("--- Test 1: Camera Command ---");
-        testCameraCommand();
-        
-        // Wait for server between tests
-        Thread.sleep(500);
-        
-        // Test 2: Servo command
-        System.out.println("\n--- Test 2: Servo Command ---");
         testServoCommand();
         
         // Wait for server to finish
@@ -86,48 +75,18 @@ public class CppClientTest {
     }
     
     /**
-     * 测试相机控制命令发送
-     * 
-     * 调用 CamMonNative.sendCameraCommand 发送相机控制命令，
-     * 验证 C++ 库能否成功发送 UDP 数据包并接收响应。
-     */
-    private static void testCameraCommand() {
-        System.out.println("[客户端] 调用 CamMonNative.sendCameraCommand(...)");
-        System.out.println("[客户端] 目标地址: " + LOCALHOST + ":" + PORT);
-        
-        long sendStart = System.currentTimeMillis();
-        // 发送相机控制命令：功能码 0x01，控制码 0x01，8字节载荷
-        byte[] response = CamMonNative.sendCameraCommand(
-            LOCALHOST, PORT, 
-            (byte)0x01, (byte)0x01, 
-            new byte[]{0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, 
-            10000  // 10秒超时
-        );
-        long sendElapsed = System.currentTimeMillis() - sendStart;
-        
-        if (response == null) {
-            System.out.println("[客户端] 失败: sendCameraCommand 返回 NULL");
-        } else {
-            System.out.println("[客户端] 成功! 接收到 " + response.length + " 字节");
-            System.out.println("[客户端] 耗时: " + sendElapsed + "毫秒");
-            printHex("响应数据", response);
-        }
-    }
-    
-    /**
      * 测试舵机控制命令发送
      * 
-     * 调用 CamMonNative.sendServoCommand 发送舵机控制命令，
-     * 验证 C++ 库能否成功发送 UDP 数据包并接收响应。
+     * 调用 CamMonNative.setPTZ 发送舵机控制命令，
+     * 验证控制器接口能否成功发送 UDP 数据包并接收响应。
      */
     private static void testServoCommand() {
-        System.out.println("[客户端] 调用 CamMonNative.sendServoCommand(...)");
+        System.out.println("[客户端] 调用 CamMonNative.setPTZ(...)");
         System.out.println("[客户端] 目标地址: " + LOCALHOST + ":" + PORT);
         System.out.println("[客户端] 参数: 方位角=45.0°, 俯仰角=30.0°, 方位速度=0.0°, 俯仰速度=0.0°, 距离=1000, 序列号=1, 控制=0xFF, 设备=0x01, 包类型=0x20");
         
         long sendStart = System.currentTimeMillis();
-        // 发送舵机控制命令
-        byte[] response = CamMonNative.sendServoCommand(
+        int responseBytes = CamMonNative.setPTZ(
             LOCALHOST, PORT, 
             45.0f,   // 方位角（度）
             30.0f,   // 俯仰角（度）
@@ -142,12 +101,11 @@ public class CppClientTest {
         );
         long sendElapsed = System.currentTimeMillis() - sendStart;
         
-        if (response == null) {
-            System.out.println("[客户端] 失败: sendServoCommand 返回 NULL");
+        if (responseBytes <= 0) {
+            System.out.println("[客户端] 失败: setPTZ 返回 " + responseBytes);
         } else {
-            System.out.println("[客户端] 成功! 接收到 " + response.length + " 字节");
+            System.out.println("[客户端] 成功! 接收到 " + responseBytes + " 字节");
             System.out.println("[客户端] 耗时: " + sendElapsed + "毫秒");
-            printHex("响应数据", response);
         }
     }
     
@@ -176,8 +134,7 @@ public class CppClientTest {
             
             byte[] buf = new byte[256];
             
-            // Receive 2 packets (camera + servo)
-            while (packetCount < 2) {
+            while (packetCount < 1) {
                 DatagramPacket recv = new DatagramPacket(buf, buf.length);
                 sock.receive(recv);
                 packetCount++;
@@ -189,10 +146,7 @@ public class CppClientTest {
                 System.out.println("[Server] Raw data:");
                 printHex("  ", buf, recv.getLength());
                 
-                // Parse packet structure
                 parsePacket(buf, recv.getLength());
-                
-                // Construct response based on packet type
                 byte[] response = constructResponse(buf, recv.getLength());
                 
                 DatagramPacket out = new DatagramPacket(response, response.length,
@@ -216,28 +170,7 @@ public class CppClientTest {
             System.out.println("[Server] Packet structure:");
             System.out.println("  hdr1: 0x" + String.format("%02X", buf[0] & 0xFF));
             System.out.println("  hdr2: 0x" + String.format("%02X", buf[1] & 0xFF));
-            System.out.println("  addr: 0x" + String.format("%02X", buf[2] & 0xFF) + " (" + (buf[2] & 0xFF) + ")");
-            System.out.println("  func: 0x" + String.format("%02X", buf[3] & 0xFF) + " (" + (buf[3] & 0xFF) + ")");
-            System.out.println("  ctrl: 0x" + String.format("%02X", buf[4] & 0xFF) + " (" + (buf[4] & 0xFF) + ")");
-            
-            if (len >= 16) {
-                // Camera packet (23 bytes)
-                System.out.print("  data: ");
-                for (int i = 5; i < 13 && i < len; i++) {
-                    System.out.printf("%02X ", buf[i] & 0xFF);
-                }
-                System.out.println();
-                if (len > 13) {
-                    System.out.println("  checksum: 0x" + String.format("%02X", buf[13] & 0xFF));
-                }
-                if (len > 15) {
-                    System.out.println("  tail1: 0x" + String.format("%02X", buf[14] & 0xFF));
-                    System.out.println("  tail2: 0x" + String.format("%02X", buf[15] & 0xFF));
-                }
-            } else {
-                // Servo packet (different structure)
-                System.out.println("  [Servo packet - different format]");
-            }
+            System.out.println("  [Controller PTZ packet]");
         }
     }
     

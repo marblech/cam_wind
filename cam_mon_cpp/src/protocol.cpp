@@ -414,7 +414,7 @@ namespace cammon {
  * 
  * @return std::vector<uint8_t> 序列化后的49字节向量
  */
-std::vector<uint8_t> LoadStatusReport::serialize() const {
+std::vector<uint8_t> LoadStatusReport::serialize() {
     std::vector<uint8_t> out;
     out.reserve(REPORT_LOAD_STATUS_FRAME_LEN);
     

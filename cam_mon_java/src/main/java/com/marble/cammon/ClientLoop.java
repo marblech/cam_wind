@@ -21,19 +21,13 @@ public class ClientLoop {
                 log.printf("=== Iter %d ===\n", i);
                 System.out.println("Iter " + i + " sending...");
                 try {
-                    byte[] resp = CamMonNative.sendServoCommand(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, 0x01, 0x02, 2000);
-                    if (resp == null) {
+                    int rc = CamMonNative.setPTZ(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, 0x01, 0x02, 2000);
+                    if (rc <= 0) {
                         timeouts++;
-                        log.println("No response (null)");
+                        log.println("No response, rc=" + rc);
                     } else {
                         success++;
-                        log.println("Resp bytes: " + bytesToHex(resp));
-                        Protocol.ServoPacket p = Protocol.ServoPacket.parseServo(resp);
-                        if (p != null) {
-                            log.printf("Parsed servo seq=%d az=%f el=%f\n", p.seq, p.azimuth, p.elevation);
-                        } else {
-                            log.println("Could not parse servo response");
-                        }
+                        log.println("Reply bytes: " + rc);
                     }
                 } catch (Exception ex) {
                     timeouts++;
@@ -48,9 +42,4 @@ public class ClientLoop {
         }
     }
 
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) sb.append(String.format("%02X ", b));
-        return sb.toString();
-    }
 }

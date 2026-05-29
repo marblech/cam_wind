@@ -14,8 +14,8 @@ public class IntegrationTestRunner {
         sim.start();
         // give simulator time to start
         Thread.sleep(300);
-        // run client (servo mode)
-        Client.main(new String[]{"127.0.0.1","4002","servo"});
+        // run client via controller PTZ interface
+        Client.main(new String[]{"127.0.0.1", "4002", "45.0", "30.0"});
         System.out.println("Integration run finished");
     }
 }

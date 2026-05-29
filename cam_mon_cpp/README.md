@@ -1,14 +1,89 @@
-# 海面光电监控设备 C++ 接口库 (cammon)
+# cammon
 
-## 项目简介
+`cammon` 是当前项目的 C++ 协议与 JNI 实现，负责把 Java 侧请求转换成设备可识别的 UDP 报文，并把接收的状态帧解析成 PTZ 数据。
 
-本项目实现了海面光电监控设备的 UDP 通信协议，提供了 C++ 接口用于发送相机控制命令和舵机控制命令。该库可通过 JNI（Java Native Interface）被 Java 应用程序调用，作为客户端与监控设备通信。
+当 Java 与 C++ 的报文定义存在冲突时，以本仓库的 C++ 实现为准。
 
-## 协议说明
+## 功能
 
-本项目基于海面光电监控设备的 UDP 通信协议文档实现，主要支持以下两类通信：
+- **标准相机报文**：`0x0F 0xF0` 帧头，`0xF0 0x0F` 帧尾，默认数据区长度 15 字节
+- **舵机报文**：`0x7E` 开头，固定 72 字节，按小端序写入浮点和整型字段
+- **状态监听**：`CamController` 在后台线程监听 UDP 状态帧并缓存最后一帧
+- **JNI 导出**：供 `cam_mon_java` 的 `CamMonNative` 调用
 
-1. **相机控制** - 通过可见光相机命令数据包与相机通信
+## 主要接口
+
+### 协议层
+
+- `cammon::Packet`：标准相机报文序列化/反序列化
+- `cammon::ServoPacket`：舵机报文序列化/反序列化
+- `cammon::build_servo_packet(...)`：构建舵机控制包
+- `cammon::make_camera_command(...)`：构建标准相机控制包
+
+### 传输层
+
+- `cammon_send_udp_and_recv(...)`：发送 UDP 并等待响应
+- `cammon_send_camera_command(...)`：发送标准相机命令
+- `cammon_send_servo_command(...)`：发送舵机命令
+- `cammon_send_packet(...)`：发送自定义标准报文
+
+### JNI 层
+
+- `CamMonNative.startStatusListener(int port)`
+- `CamMonNative.stopStatusListener()`
+- `CamMonNative.getLastStatus()`
+- `CamMonNative.getPTZ()`
+- `CamMonNative.setPTZ(...)`
+
+## 协议约定
+
+- 标准帧：`[0x0F 0xF0][addr][func][ctrl][data...][checksum][0xF0 0x0F]`
+- 校验和：对 `addr + func + ctrl + data...` 做累加和，结果取低 8 位
+- 舵机帧：固定 72 字节，字段按 `protocol.h` 中定义的小端序布局写入
+- 状态帧：`0x1F 0xF1` 开头，PTZ 相关字段由 `CamController` 从固定偏移解析
+
+## 构建
+
+在 Linux 上使用 CMake：
+
+```bash
+cd cam_mon_cpp
+cmake -S . -B build
+cmake --build build --target cammon -j"$(nproc)"
+```
+
+构建产物位于 `cam_mon_cpp/build/libcammon.so`。
+
+## 与 Java 联动
+
+Java 项目运行时需要能找到 native 库：
+
+```bash
+cd cam_mon_java
+mvn test
+```
+
+如果需要显式指定库路径，可以加上：
+
+```bash
+mvn test -Djava.library.path=../cam_mon_cpp/build
+```
+
+## 验证
+
+当前仓库中已验证通过的回归：
+
+- `cammon` 目标构建成功
+- `cam_mon_java` 的 `mvn test` 通过
+
+## 参考文件
+
+- `src/protocol.h`
+- `src/protocol.cpp`
+- `src/cam_controller.cpp`
+- `src/cammon_api.cpp`
+- `src/cammon_jni.cpp`
+
 ````markdown
 # cammon — C++ 相机/云台控制库（带 JNI 暴露）
 
