@@ -14,6 +14,7 @@ set(CAMMON_SOURCES
     src/cammon_jni.cpp
     src/cam_controller.cpp
     src/cam_ajf_lib.cpp
+    src/multicast_receiver.cpp
 )
 
 set(CAMMON_HEADERS
@@ -21,6 +22,7 @@ set(CAMMON_HEADERS
     src/cammon_api.h
     src/cam_ajf_lib.h
     src/cam_controller.h
+    src/multicast_receiver.h
 )
 
 # Build as shared library (DLL on Windows, SO on Linux)
@@ -89,5 +91,18 @@ else()
     target_link_libraries(cam_mon_crosshair_test PRIVATE cammon pthread)
 endif()
 set_target_properties(cam_mon_crosshair_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
+)
+
+# ============================================================================
+# Multicast receiver test
+# ============================================================================
+add_executable(multicast_receiver_test src/test_multicast.cpp)
+if(WIN32)
+    target_link_libraries(multicast_receiver_test PRIVATE cammon ws2_32)
+else()
+    target_link_libraries(multicast_receiver_test PRIVATE cammon pthread)
+endif()
+set_target_properties(multicast_receiver_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
 )
