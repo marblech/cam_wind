@@ -1,5 +1,6 @@
 #include "protocol.h"
 #include <cstring>
+#include <cstdio>
 
 namespace cammon {
 
@@ -525,10 +526,9 @@ std::optional<LoadStatusReport> LoadStatusReport::deserialize(const std::vector<
     if (buf[0] != REPORT_HDR1 || buf[1] != REPORT_HDR2) return std::nullopt;
     
     size_t idx = 2;
-    r.hdr1 = buf[idx++];
-    r.hdr2 = buf[idx++];
+    // 按协议布局：buf[0-1]=帧头, buf[2]=addr, buf[3-4]=frame_seq (小端), buf[5...] = data
     r.addr = buf[idx++];
-    
+
     // 帧序号 (小端)
     r.frame_seq = (uint16_t)buf[idx] | ((uint16_t)buf[idx+1] << 8);
     idx += 2;
@@ -584,15 +584,28 @@ std::optional<LoadStatusReport> LoadStatusReport::deserialize(const std::vector<
     r.tail2 = buf[idx++];
     
     // 验证帧尾
-    if (r.tail1 != REPORT_TAIL1 || r.tail2 != REPORT_TAIL2) return std::nullopt;
-    
-    // 验证校验和
+    if (r.tail1 != REPORT_TAIL1 || r.tail2 != REPORT_TAIL2) {
+        fprintf(stderr, "[LoadStatusReport] 帧尾不匹配: %02X %02X (期望 %02X %02X)\n", r.tail1, r.tail2, REPORT_TAIL1, REPORT_TAIL2);
+        return std::nullopt;
+    }
+
+    // 验证校验和：计算地址位到数据位（包含帧序号低字节）之和的低位
     std::vector<uint8_t> csrange;
     csrange.push_back(r.addr);
-    for (size_t i = 4; i < REPORT_LOAD_STATUS_FRAME_LEN - 3; ++i) {
+    // 地址后的第一个字节是帧序号低字节，索引为 3，数据区一直到索引 45
+    for (size_t i = 3; i < REPORT_LOAD_STATUS_FRAME_LEN - 3; ++i) {
         csrange.push_back(buf[i]);
     }
-    if (compute_checksum(csrange) != r.checksum) return std::nullopt;
+    uint8_t cs_calc = compute_checksum(csrange);
+    if (cs_calc != r.checksum) {
+        fprintf(stderr, "[LoadStatusReport] 校验和不匹配: 期望=%02X, 计算=%02X (addr=%02X, frame_seq=%u)\n",
+                r.checksum, cs_calc, r.addr, r.frame_seq);
+        // 同时打印前 20 字节的十六进制用于排查
+        fprintf(stderr, "[LoadStatusReport] 前20字节: ");
+        for (size_t i = 0; i < buf.size() && i < 20; ++i) fprintf(stderr, "%02X ", buf[i]);
+        fprintf(stderr, "\n");
+        return std::nullopt;
+    }
     
     return r;
 }

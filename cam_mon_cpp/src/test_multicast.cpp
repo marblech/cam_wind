@@ -94,12 +94,12 @@ int main(int argc, char* argv[]) {
     // 设置原始报文回调
     receiver.setOnRawPacketHandler([](const uint8_t* data, int len, const char* addr, int port) {
         g_stats.total_packets++;
-        // 可选：打印原始报文_hex
-        // fprintf(stderr, "[原始报文] src=%s:%d, len=%d, data=", addr, port, len);
-        // for (int i = 0; i < len && i < 32; i++) {
-        //     fprintf(stderr, "%02X ", data[i]);
-        // }
-        // fprintf(stderr, "\n");
+        // 打印原始报文 hex（前20字节）
+        fprintf(stderr, "[原始报文] src=%s:%d, len=%d, data=", addr, port, len);
+        for (int i = 0; i < len && i < 20; i++) {
+            fprintf(stderr, "%02X ", data[i]);
+        }
+        fprintf(stderr, "...\n");
     });
 
     // 设置负载状态上报回调
