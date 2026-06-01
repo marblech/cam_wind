@@ -98,13 +98,15 @@ mvn test -Djava.library.path=../cam_mon_cpp/build
 
 - 新增 `CamController` C API（位于 `src/cam_controller.*`）：
   - `cam_controller_create()` / `cam_controller_destroy()`
-  - `cam_controller_start(listen_port)` / `cam_controller_stop()` — 在后台线程监听 UDP 状态帧并缓存最后一帧
+  - `cam_controller_start_ex(listen_port, mcast_group)` / `cam_controller_start(listen_port)` / `cam_controller_stop()` — 在后台线程监听 UDP 状态帧并缓存最后一帧；
+    `cam_controller_start_ex` 接受可选的 `mcast_group` 字符串，如果非空则尝试加入该组播组并在指定端口监听；传 `NULL` 或空字符串表示点对点（直接 UDP）模式。
   - `cam_controller_get_last(uint8_t* buf, int buf_len)` — 读取最后收到的原始帧
   - `cam_controller_get_ptz(float* az, float* el, float* ir, float* vis)` — 从缓存帧解析 PTZ 值（小端 float）
   - `cam_controller_set_ptz(host, port, az, el, azs, els, distance, seq, control)` — 发送舵机（servo）控制包
 
 - JNI 层（`cammon_jni.cpp`）已新增/更新方法，供 Java 调用：
-  - `startStatusListener(int port)` / `stopStatusListener()`
+  - `startStatusListener(int port, String mcastGroup)` / `stopStatusListener()`
+    - Java 侧提供了两种调用方式：`startStatusListener(port)`（点对点） 或 `startStatusListener(port, "239.255.43.21")`（组播）。
   - `getLastStatus()` → 返回 `byte[]`（最近一帧原始数据）
   - `getPTZ()` → 返回 Java 对象 `com.marble.cammon.PTZStatus`（字段：`az, el, irFocus, visFocus`）
   - `setPTZ(...)` → 发送舵机命令并返回发送/接收结果（int）

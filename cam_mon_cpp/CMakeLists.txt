@@ -106,3 +106,14 @@ endif()
 set_target_properties(multicast_receiver_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
 )
+
+# Example helper: build a small example that demonstrates cam_controller usage
+add_executable(cam_controller_example examples/cam_controller_example.cpp)
+if(WIN32)
+    target_link_libraries(cam_controller_example PRIVATE cammon ws2_32)
+else()
+    target_link_libraries(cam_controller_example PRIVATE cammon pthread)
+endif()
+set_target_properties(cam_controller_example PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
+)

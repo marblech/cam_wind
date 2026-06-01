@@ -37,6 +37,8 @@ struct CamController {
     std::vector<uint8_t> last_packet;
     int listen_port{0};
     int sock{-1};
+    bool is_multicast{false};
+    std::string mcast_group;
 };
 
 static uint32_t read_le_u32(const std::vector<uint8_t>& buf, size_t idx) {
@@ -103,6 +105,16 @@ static void listener_loop(CamController* c) {
 
     c->sock = sock;
 
+    // allow reuse of address so multicast bind can succeed if another
+    // listener is present. On some systems SO_REUSEPORT may also be
+    // desirable but SO_REUSEADDR is sufficient in most cases.
+    int reuse = 1;
+#ifdef _WIN32
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+#else
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+#endif
+
     sockaddr_in addr;
     std::memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -119,6 +131,19 @@ static void listener_loop(CamController* c) {
         c->sock = -1;
         return;
         }
+    // If this instance was configured to join a multicast group, do so now.
+    if (c->is_multicast && !c->mcast_group.empty()) {
+        struct ip_mreq mreq;
+        mreq.imr_multiaddr.s_addr = inet_addr(c->mcast_group.c_str());
+        mreq.imr_interface.s_addr = INADDR_ANY;
+        if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq)) < 0) {
+            perror("cam_controller IP_ADD_MEMBERSHIP");
+            // Not fatal: continue running but mark not multicast
+            c->is_multicast = false;
+        } else {
+            std::cerr << "[CamController] Joined multicast group " << c->mcast_group << "\n";
+        }
+    }
 
     // set recv timeout so we can check running flag periodically
     timeval tv;
@@ -172,10 +197,19 @@ void cam_controller_destroy(CamController* h) {
     delete h;
 }
 
-int cam_controller_start(CamController* h, int port) {
+int cam_controller_start_ex(CamController* h, int port, const char* mcast_group) {
     if (!h) return -1;
     if (h->running.load()) return -2; // already running
     h->listen_port = port;
+    if (mcast_group && mcast_group[0] != '\0') {
+        h->is_multicast = true;
+        h->mcast_group = mcast_group;
+        std::cerr << "[CamController] Starting in multicast mode, group=" << h->mcast_group << " port=" << port << "\n";
+    } else {
+        h->is_multicast = false;
+        h->mcast_group.clear();
+    }
+
     h->running.store(true);
     try {
         h->thr = std::thread(listener_loop, h);
@@ -191,6 +225,19 @@ void cam_controller_stop(CamController* h) {
     if (!h->running.load()) return;
     h->running.store(false);
         if (h->sock >= 0) {
+        // If multicast was joined, try to drop membership before closing.
+        if (h->is_multicast && !h->mcast_group.empty()) {
+            struct ip_mreq mreq;
+            mreq.imr_multiaddr.s_addr = inet_addr(h->mcast_group.c_str());
+            mreq.imr_interface.s_addr = INADDR_ANY;
+            if (setsockopt(h->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char*)&mreq, sizeof(mreq)) < 0) {
+                // best-effort; don't fail stop on this
+                perror("cam_controller IP_DROP_MEMBERSHIP");
+            } else {
+                std::cerr << "[CamController] Left multicast group " << h->mcast_group << "\n";
+            }
+        }
+
         // closing socket will interrupt recvfrom
     #ifdef _WIN32
         closesocket(h->sock);

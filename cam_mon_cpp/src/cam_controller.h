@@ -11,7 +11,12 @@ CamController* cam_controller_create();
 void cam_controller_destroy(CamController* h);
 
 // Start listening on the given UDP port. Returns 0 on success, negative on error.
-int cam_controller_start(CamController* h, int port);
+// If `mcast_group` is non-null and non-empty, the listener will attempt to
+// join the specified multicast group on the given port. Pass NULL or empty
+// string to run in point-to-point (direct UDP) mode.
+int cam_controller_start_ex(CamController* h, int port, const char* mcast_group);
+// Backwards-compatible wrapper: start without multicast group.
+static inline int cam_controller_start(CamController* h, int port) { return cam_controller_start_ex(h, port, nullptr); }
 // Stop listening (blocks until thread exits)
 void cam_controller_stop(CamController* h);
 // Get last received status packet. Copies up to buflen bytes into buf and returns length, or 0 if none.

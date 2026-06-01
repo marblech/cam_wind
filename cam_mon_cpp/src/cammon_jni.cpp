@@ -35,11 +35,21 @@ extern "C" {
  * @param port UDP 监听端口
  * @return true 如果启动成功，false 失败
  */
-JNIEXPORT jboolean JNICALL Java_com_marble_cammon_CamMonNative_startStatusListener(JNIEnv* env, jclass, jint port) {
+JNIEXPORT jboolean JNICALL Java_com_marble_cammon_CamMonNative_startStatusListener(JNIEnv* env, jclass, jint port, jstring jmcastGroup) {
     if (g_controller) return JNI_FALSE;
     g_controller = cam_controller_create();
     if (!g_controller) return JNI_FALSE;
-    int r = cam_controller_start(g_controller, (int)port);
+    const char* mg = nullptr;
+    std::string mg_tmp;
+    if (jmcastGroup != NULL) {
+        const char* s = env->GetStringUTFChars(jmcastGroup, NULL);
+        if (s) {
+            mg_tmp = s;
+            mg = mg_tmp.c_str();
+            env->ReleaseStringUTFChars(jmcastGroup, s);
+        }
+    }
+    int r = cam_controller_start_ex(g_controller, (int)port, mg);
     if (r != 0) {
         cam_controller_destroy(g_controller);
         g_controller = nullptr;

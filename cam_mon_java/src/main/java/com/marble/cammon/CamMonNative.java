@@ -51,7 +51,14 @@ public class CamMonNative {
      * @param port UDP 监听端口
      * @return true 如果启动成功，false 失败
      */
-    public static native boolean startStatusListener(int port);
+    // Start listener. If mcastGroup is non-null, join that multicast group;
+    // otherwise operate in point-to-point UDP listening mode.
+    public static native boolean startStatusListener(int port, String mcastGroup);
+
+    // Convenience overload for callers that don't want to supply a multicast group.
+    public static boolean startStatusListener(int port) {
+        return startStatusListener(port, null);
+    }
 
     /**
      * 停止后台状态监听器
