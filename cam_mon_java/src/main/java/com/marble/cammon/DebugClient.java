@@ -41,7 +41,8 @@ public class DebugClient {
     }
 
     static void testStatusListener() throws Exception {
-        int listenPort = 5003;
+        // 使用开发板的组播端口
+        int listenPort = 23232;
         // Start native listener in multicast mode for testing.
         final String mcast = "239.255.43.21";
         boolean started = CamMonNative.startStatusListener(listenPort, mcast);
