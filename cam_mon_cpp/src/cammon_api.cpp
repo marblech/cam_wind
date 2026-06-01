@@ -1,4 +1,4 @@
-#include "protocol.h"
+﻿#include "protocol.h"
 #include "cammon_api.h"
 
 #ifdef _WIN32
