@@ -30,6 +30,7 @@
 #endif
 
 #include "protocol.h"
+#include "cammon_api.h"
 
 namespace cammon {
 
@@ -87,7 +88,7 @@ static constexpr int MULTICAST_RECV_TIMEOUT_MS = 1000;
  * receiver.stop();
  * @endcode
  */
-class MulticastReceiver {
+class CAMMON_API MulticastReceiver {
 public:
     /**
      * @brief 构造函数
