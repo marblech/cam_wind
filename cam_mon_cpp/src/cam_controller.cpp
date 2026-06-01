@@ -16,6 +16,8 @@ using ssize_t = int;
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #endif
 
 #include <atomic>
@@ -136,6 +138,28 @@ static void listener_loop(CamController* c) {
         struct ip_mreq mreq;
         mreq.imr_multiaddr.s_addr = inet_addr(c->mcast_group.c_str());
         mreq.imr_interface.s_addr = INADDR_ANY;
+        // If multiple interfaces are present, prefer a non-loopback,
+        // non-point-to-point IPv4 address for membership so we don't join
+        // on an unrelated interface (e.g., ppp0). Try to pick a suitable
+        // local address via getifaddrs.
+#ifndef _WIN32
+        struct ifaddrs *ifap = NULL;
+        if (getifaddrs(&ifap) == 0 && ifap) {
+            for (struct ifaddrs *ifa = ifap; ifa; ifa = ifa->ifa_next) {
+                if (!ifa->ifa_addr) continue;
+                if (ifa->ifa_addr->sa_family != AF_INET) continue;
+                int flags = ifa->ifa_flags;
+                if (!(flags & IFF_UP)) continue;
+                if (flags & IFF_LOOPBACK) continue;
+                if (flags & IFF_POINTOPOINT) continue;
+                struct sockaddr_in *s4 = (struct sockaddr_in*)ifa->ifa_addr;
+                if (s4->sin_addr.s_addr == INADDR_ANY) continue;
+                mreq.imr_interface.s_addr = s4->sin_addr.s_addr;
+                break;
+            }
+            freeifaddrs(ifap);
+        }
+#endif
         if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq)) < 0) {
             perror("cam_controller IP_ADD_MEMBERSHIP");
             // Not fatal: continue running but mark not multicast
