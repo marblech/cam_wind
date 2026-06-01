@@ -42,7 +42,9 @@ public class DebugClient {
 
     static void testStatusListener() throws Exception {
         int listenPort = 5003;
-        boolean started = CamMonNative.startStatusListener(listenPort);
+        // Start native listener in multicast mode for testing.
+        final String mcast = "239.255.43.21";
+        boolean started = CamMonNative.startStatusListener(listenPort, mcast);
         if (!started) {
             throw new IllegalStateException("Failed to start native status listener");
         }
@@ -61,7 +63,7 @@ public class DebugClient {
         bb.putFloat(-2.5f);
 
         try (DatagramSocket socket = new DatagramSocket()) {
-            DatagramPacket packet = new DatagramPacket(pkt, pkt.length, InetAddress.getByName("127.0.0.1"), listenPort);
+            DatagramPacket packet = new DatagramPacket(pkt, pkt.length, InetAddress.getByName(mcast), listenPort);
             socket.send(packet);
         }
 

@@ -25,7 +25,8 @@ public class Client {
     public static void main(String[] args) throws Exception {
         if (args.length > 0 && "listen".equalsIgnoreCase(args[0])) {
             int listenPort = args.length > 1 ? Integer.parseInt(args[1]) : 5001;
-            runListenerDemo(listenPort);
+            String mcast = args.length > 2 ? args[2] : null;
+            runListenerDemo(listenPort, mcast);
             return;
         }
 
@@ -47,9 +48,9 @@ public class Client {
         System.out.println("setPTZ succeeded, reply bytes=" + rc);
     }
 
-    private static void runListenerDemo(int listenPort) throws Exception {
-        System.out.println("Starting PTZ listener on UDP port " + listenPort + "...");
-        boolean started = CamMonNative.startStatusListener(listenPort);
+    private static void runListenerDemo(int listenPort, String mcastGroup) throws Exception {
+        System.out.println("Starting PTZ listener on UDP port " + listenPort + "... (mcast=" + mcastGroup + ")");
+        boolean started = CamMonNative.startStatusListener(listenPort, mcastGroup);
         if (!started) {
             System.err.println("Failed to start native status listener");
             System.exit(2);
