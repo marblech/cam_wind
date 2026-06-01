@@ -1,4 +1,5 @@
 ﻿#include "protocol.h"
+#include "plog_init.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -10,16 +11,17 @@
 using namespace cammon;
 
 int main(int argc, char** argv) {
+    initPlog();
     int port = 4000;
     if (argc > 1) port = atoi(argv[1]);
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) { perror("socket"); return 1; }
+    if (sock < 0) { PLOG_ERROR << "socket failed"; return 1; }
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(port);
-    if (bind(sock, (sockaddr*)&addr, sizeof(addr)) < 0) { perror("bind"); return 1; }
-    std::cout << "Simulator listening on UDP port " << port << "\n";
+    if (bind(sock, (sockaddr*)&addr, sizeof(addr)) < 0) { PLOG_ERROR << "bind failed"; return 1; }
+    PLOG_INFO << "Simulator listening on UDP port " << port;
     while (1) {
         uint8_t buf[4096];
         sockaddr_in peer{}; socklen_t plen = sizeof(peer);
@@ -29,7 +31,7 @@ int main(int argc, char** argv) {
         // try parsing as standard 0x0F F0 frame
         auto pkt = Packet::deserialize(in);
         if (pkt) {
-            std::cout << "Sim: got addr=0x" << std::hex << int(pkt->addr) << std::dec << " func=0x" << std::hex << int(pkt->func) << std::dec << " ctrl=0x" << std::hex << int(pkt->ctrl) << std::dec << " payload_len=" << pkt->data.size() << "\n";
+            PLOG_INFO << "Sim: got addr=0x" << std::hex << int(pkt->addr) << std::dec << " func=0x" << std::hex << int(pkt->func) << std::dec << " ctrl=0x" << std::hex << int(pkt->ctrl) << std::dec << " payload_len=" << pkt->data.size();
             Packet resp;
             resp.addr = pkt->addr; // echo
             resp.func = uint8_t(0x80 | pkt->func);
@@ -43,7 +45,7 @@ int main(int argc, char** argv) {
         // try parsing as servo frame (header 0x7E)
         auto servo = ServoPacket::deserialize_servo(in);
         if (servo) {
-            std::cout << "Sim: got servo seq=" << int(servo->seq) << " control=0x" << std::hex << int(servo->control) << std::dec << " az=" << servo->azimuth << " el=" << servo->elevation << "\n";
+            PLOG_INFO << "Sim: got servo seq=" << int(servo->seq) << " control=0x" << std::hex << int(servo->control) << std::dec << " az=" << servo->azimuth << " el=" << servo->elevation;
             // craft a simple servo ACK: mirror seq and set a small ack flag in reserved_state
             ServoPacket resp;
             resp.header = 0x7E;
@@ -70,7 +72,7 @@ int main(int argc, char** argv) {
             sendto(sock, out.data(), out.size(), 0, (sockaddr*)&peer, plen);
             continue;
         }
-        std::cerr << "Received invalid packet (unknown format)\n";
+        PLOG_WARNING << "Received invalid packet (unknown format)";
     }
     close(sock);
     return 0;

@@ -1,26 +1,27 @@
 ﻿#include "cam_ajf_lib.h"
 #include "protocol.h"
 #include "cammon_api.h"  // 底层 API 声明
+#include "plog_init.h"
 
 #ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "ws2_32.lib")
 #else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #include <fcntl.h>
 #endif
 
 #ifdef _WIN32
-#ifndef ssize_t
-using ssize_t = int;
-#endif
+    #ifndef ssize_t
+    using ssize_t = int;
+    #endif
 #endif
 
 #include <cstring>
@@ -99,8 +100,6 @@ static float read_le_float(const uint8_t* buf, size_t idx) {
 }
 
 // ============================================================================
-// CamAJFLib 实现
-// ============================================================================
 
 CamAJFLib::CamAJFLib() {
     init_winsock();
@@ -126,7 +125,7 @@ bool CamAJFLib::initWithConfig(const CameraConfig& config) {
     // 创建命令套接字
     cmd_sock_ = create_udp_socket();
     if (cmd_sock_ < 0) {
-        std::cerr << "[CamAJFLib] Failed to create command socket\n";
+        PLOG_ERROR << "[CamAJFLib] Failed to create command socket";
         return false;
     }
     
@@ -136,11 +135,11 @@ bool CamAJFLib::initWithConfig(const CameraConfig& config) {
     tv.tv_usec = (config.timeout_ms % 1000) * 1000;
     if (setsockopt(cmd_sock_, SOL_SOCKET, SO_RCVTIMEO, 
                    reinterpret_cast<const char*>(&tv), sizeof(tv)) < 0) {
-        std::cerr << "[CamAJFLib] Failed to set recv timeout\n";
+        PLOG_ERROR << "[CamAJFLib] Failed to set recv timeout";
     }
     
-    std::cout << "[CamAJFLib] Initialized: host=" << config.host 
-              << " port=" << config.port << " timeout=" << config.timeout_ms << "ms\n";
+    PLOG_INFO << "[CamAJFLib] Initialized: host=" << config.host 
+              << " port=" << config.port << " timeout=" << config.timeout_ms << "ms";
     return true;
 }
 
@@ -157,26 +156,26 @@ void CamAJFLib::shutdown() {
         status_sock_ = -1;
     }
     
-    std::cout << "[CamAJFLib] Shutdown complete\n";
+    PLOG_INFO << "[CamAJFLib] Shutdown complete";
 }
 
 bool CamAJFLib::start() {
     // 如果已经在运行，不重复启动
     if (running_) {
-        std::cout << "[CamAJFLib] Listener already running\n";
+        PLOG_INFO << "[CamAJFLib] Listener already running";
         return false;
     }
     
     // 检查命令套接字是否已初始化
     if (cmd_sock_ < 0) {
-        std::cerr << "[CamAJFLib] Not initialized, call init() first\n";
+        PLOG_ERROR << "[CamAJFLib] Not initialized, call init() first";
         return false;
     }
     
     // 创建状态监听套接字
     status_sock_ = create_udp_socket();
     if (status_sock_ < 0) {
-        std::cerr << "[CamAJFLib] Failed to create status listener socket\n";
+        PLOG_ERROR << "[CamAJFLib] Failed to create status listener socket";
         return false;
     }
     
@@ -189,9 +188,9 @@ bool CamAJFLib::start() {
     if (bind(status_sock_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
 #ifdef _WIN32
         int err = WSAGetLastError();
-        std::cerr << "[CamAJFLib] bind failed, error=" << err << "\n";
+        PLOG_ERROR << "[CamAJFLib] bind failed, error=" << err;
 #else
-        perror("[CamAJFLib] bind");
+        PLOG_ERROR << "[CamAJFLib] bind failed: " << strerror(errno);
 #endif
         close_udp_socket(status_sock_);
         status_sock_ = -1;
@@ -202,7 +201,7 @@ bool CamAJFLib::start() {
     running_ = true;
     listener_thread_ = std::thread(&CamAJFLib::status_listener_thread, this);
     
-    std::cout << "[CamAJFLib] Status listener started on port " << config_.status_port << "\n";
+    PLOG_INFO << "[CamAJFLib] Status listener started on port " << config_.status_port;
     return true;
 }
 
@@ -221,7 +220,7 @@ void CamAJFLib::stop() {
         listener_thread_.join();
     }
     
-    std::cout << "[CamAJFLib] Status listener stopped\n";
+    PLOG_INFO << "[CamAJFLib] Status listener stopped";
 }
 
 PTZStatus CamAJFLib::get_ptz() {
@@ -253,15 +252,10 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_spe
     serv.sin_port = htons(config_.port);
     inet_pton(AF_INET, config_.host.c_str(), &serv.sin_addr);
     
-    ssize_t sent = sendto(cmd_sock_, 
-                          reinterpret_cast<const char*>(packet.data()), 
-                          packet.size(), 
-                          0, 
-                          reinterpret_cast<sockaddr*>(&serv), 
-                          sizeof(serv));
+    ssize_t sent = sendto(cmd_sock_, reinterpret_cast<const char*>(packet.data()), packet.size(), 0, reinterpret_cast<sockaddr*>(&serv), sizeof(serv));
     
     if (sent < 0) {
-        std::cerr << "[CamAJFLib] Failed to send servo command\n";
+        PLOG_ERROR << "[CamAJFLib] Failed to send servo command";
         return false;
     }
     
@@ -292,15 +286,15 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_spe
             current_ptz_.azimuth = servo_resp->azimuth;
             current_ptz_.elevation = servo_resp->elevation;
             current_ptz_.valid = true;
-            std::cout << "[CamAJFLib] PTZ response: az=" << servo_resp->azimuth 
-                      << " el=" << servo_resp->elevation << "\n";
+            PLOG_INFO << "[CamAJFLib] PTZ response: az=" << servo_resp->azimuth 
+                      << " el=" << servo_resp->elevation;
             broadcast_ptz_update();
             return true;
         }
     }
     
     // 没有响应但命令已发送
-    std::cout << "[CamAJFLib] PTZ command sent (no response): az=" << azimuth << " el=" << elevation << "\n";
+    PLOG_INFO << "[CamAJFLib] PTZ command sent (no response): az=" << azimuth << " el=" << elevation;
     return true;
 }
 
@@ -323,7 +317,7 @@ bool CamAJFLib::set_zoom(float zoom) {
                           reinterpret_cast<sockaddr*>(&serv), sizeof(serv));
     
     if (sent < 0) {
-        std::cerr << "[CamAJFLib] Failed to send zoom command\n";
+        PLOG_ERROR << "[CamAJFLib] Failed to send zoom command";
         return false;
     }
     
@@ -333,7 +327,7 @@ bool CamAJFLib::set_zoom(float zoom) {
         current_ptz_.zoom = zoom;
     }
     
-    std::cout << "[CamAJFLib] Zoom set to: " << zoom << "\n";
+    PLOG_INFO << "[CamAJFLib] Zoom set to: " << zoom;
     return true;
 }
 
@@ -359,7 +353,7 @@ bool CamAJFLib::set_focus(float focus) {
                           reinterpret_cast<sockaddr*>(&serv), sizeof(serv));
     
     if (sent < 0) {
-        std::cerr << "[CamAJFLib] Failed to send focus command\n";
+        PLOG_ERROR << "[CamAJFLib] Failed to send focus command";
         return false;
     }
     
@@ -369,7 +363,7 @@ bool CamAJFLib::set_focus(float focus) {
         current_ptz_.focus = focus;
     }
     
-    std::cout << "[CamAJFLib] Focus set to: " << focus << "\n";
+    PLOG_INFO << "[CamAJFLib] Focus set to: " << focus;
     return true;
 }
 
@@ -383,7 +377,7 @@ void CamAJFLib::on_ptz_update(PTZCallback callback) {
 // ============================================================================
 
 void CamAJFLib::status_listener_thread() {
-    std::cout << "[CamAJFLib] Status listener thread started\n";
+    PLOG_INFO << "[CamAJFLib] Status listener thread started";
     
     while (running_) {
         uint8_t buf[2048];
@@ -407,7 +401,7 @@ void CamAJFLib::status_listener_thread() {
         parse_status_report(std::vector<uint8_t>(buf, buf + n));
     }
     
-    std::cout << "[CamAJFLib] Status listener thread exited\n";
+    PLOG_INFO << "[CamAJFLib] Status listener thread exited";
 }
 
 bool CamAJFLib::parse_status_report(const std::vector<uint8_t>& buf) {
@@ -422,7 +416,7 @@ bool CamAJFLib::parse_status_report(const std::vector<uint8_t>& buf) {
         cs ^= buf[i];
     }
     if (cs != buf[48]) {
-        std::cerr << "[CamAJFLib] Status report checksum mismatch\n";
+        PLOG_ERROR << "[CamAJFLib] Status report checksum mismatch";
         return false;
     }
     
@@ -441,8 +435,8 @@ bool CamAJFLib::parse_status_report(const std::vector<uint8_t>& buf) {
         current_ptz_.valid = true;
     }
     
-    std::cout << "[CamAJFLib] Status: az=" << servo_az << " el=" << servo_el 
-              << " focus=" << vis_focus << "\n";
+    PLOG_INFO << "[CamAJFLib] Status: az=" << servo_az << " el=" << servo_el 
+              << " focus=" << vis_focus;
     
     // 触发回调
     broadcast_ptz_update();

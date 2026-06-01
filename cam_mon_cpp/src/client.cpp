@@ -1,4 +1,5 @@
 ﻿#include "protocol.h"
+#include "plog_init.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -9,12 +10,13 @@
 using namespace cammon;
 
 int main(int argc, char** argv) {
+    initPlog();
     const char* host = "127.0.0.1";
     int port = 4000;
     if (argc > 1) host = argv[1];
     if (argc > 2) port = atoi(argv[2]);
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) { perror("socket"); return 1; }
+    if (sock < 0) { PLOG_ERROR << "socket failed"; return 1; }
     sockaddr_in serv{};
     serv.sin_family = AF_INET;
     serv.sin_port = htons(port);
@@ -31,16 +33,16 @@ int main(int argc, char** argv) {
         Packet p = make_camera_command(static_cast<uint8_t>(VisibleCameraFunction::VC_FUNC_CONTINUOUS_ZOOM), static_cast<uint8_t>(CameraControl::CAM_CTRL_CONT_PLUS), payload);
         auto out = p.serialize();
         ssize_t sent = sendto(sock, out.data(), out.size(), 0, (sockaddr*)&serv, sizeof(serv));
-        if (sent < 0) { perror("sendto"); return 1; }
-        std::cout << "Client: sent " << sent << " bytes\n";
+        if (sent < 0) { PLOG_ERROR << "sendto failed"; return 1; }
+        PLOG_INFO << "Client: sent " << sent << " bytes";
         uint8_t buf[4096];
         sockaddr_in peer{}; socklen_t plen=sizeof(peer);
         ssize_t n = recvfrom(sock, buf, sizeof(buf), 0, (sockaddr*)&peer, &plen);
-        if (n <= 0) { std::cerr << "no response\n"; return 1; }
+        if (n <= 0) { PLOG_ERROR << "no response"; return 1; }
         std::vector<uint8_t> in(buf, buf + n);
         auto resp = Packet::deserialize(in);
-        if (!resp) { std::cerr << "invalid response\n"; return 1; }
-        std::cout << "Client: received func=0x" << std::hex << int(resp->func) << std::dec << " addr=0x" << std::hex << int(resp->addr) << std::dec << " payload_len=" << resp->data.size() << "\n";
+        if (!resp) { PLOG_ERROR << "invalid response"; return 1; }
+        PLOG_INFO << "Client: received func=0x" << std::hex << int(resp->func) << std::dec << " addr=0x" << std::hex << int(resp->addr) << std::dec << " payload_len=" << resp->data.size();
     } else {
         // build a servo control packet
         ServoPacket s;
@@ -66,16 +68,16 @@ int main(int argc, char** argv) {
         s.backup = 0;
         auto out = s.serialize_servo();
         ssize_t sent = sendto(sock, out.data(), out.size(), 0, (sockaddr*)&serv, sizeof(serv));
-        if (sent < 0) { perror("sendto"); return 1; }
-        std::cout << "Client: sent servo " << sent << " bytes\n";
+        if (sent < 0) { PLOG_ERROR << "sendto failed"; return 1; }
+        PLOG_INFO << "Client: sent servo " << sent << " bytes";
         uint8_t buf[4096];
         sockaddr_in peer{}; socklen_t plen=sizeof(peer);
         ssize_t n = recvfrom(sock, buf, sizeof(buf), 0, (sockaddr*)&peer, &plen);
-        if (n <= 0) { std::cerr << "no response\n"; return 1; }
+        if (n <= 0) { PLOG_ERROR << "no response"; return 1; }
         std::vector<uint8_t> in(buf, buf + n);
         auto resp = ServoPacket::deserialize_servo(in);
-        if (!resp) { std::cerr << "invalid servo response\n"; return 1; }
-        std::cout << "Client: received servo seq=" << int(resp->seq) << " az=" << resp->azimuth << " el=" << resp->elevation << "\n";
+        if (!resp) { PLOG_ERROR << "invalid servo response"; return 1; }
+        PLOG_INFO << "Client: received servo seq=" << int(resp->seq) << " az=" << resp->azimuth << " el=" << resp->elevation;
     }
     close(sock);
     return 0;

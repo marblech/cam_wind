@@ -27,7 +27,8 @@ set(CAMMON_HEADERS
 
 # Build as static library to allow linking C++ symbols into tests
 # (avoids needing explicit __declspec(dllexport) on classes)
-add_library(cammon SHARED ${CAMMON_SOURCES} ${CAMMON_HEADERS})
+add_library(cammon SHARED ${CAMMON_SOURCES} ${CAMMON_HEADERS}
+    src/plog_init.cpp)
 
 # Ensure CAMMON_EXPORTS is defined when building the DLL so symbols marked with
 # CAMMON_API expand to __declspec(dllexport)
@@ -42,6 +43,7 @@ endif()
 
 target_include_directories(cammon PUBLIC
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/plog/include
 )
 
 # Platform-specific settings
