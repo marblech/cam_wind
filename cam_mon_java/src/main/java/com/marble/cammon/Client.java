@@ -1,9 +1,6 @@
 package com.marble.cammon;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.util.Arrays;
+// Client only uses JNI interfaces from CamMonNative; UDP fallback removed
 
 /**
  * 客户端主程序 - 通过 JNI 调用 C++ 原生库进行摄像头监控通信。
@@ -48,40 +45,30 @@ public class Client {
         int port = 4001;
         if (args.length > 0) host = args[0];
         if (args.length > 1) port = Integer.parseInt(args[1]);
-        DatagramSocket sock = new DatagramSocket();
-        InetAddress addr = InetAddress.getByName(host);
         boolean useServo = args.length > 2 && args[2].equals("servo");
         boolean useCrosshair = args.length > 2 && args[2].equals("crosshair");
         boolean usePTZ = args.length > 2 && args[2].equals("ptz");
         if (useCrosshair) {
-            System.out.println("Running crosshair sequence...");
-            CrosshairControl.runCrosshairSequence(host, port, false);
+            System.out.println("Crosshair helper unavailable in this build; skipping.");
             return;
         } else if (usePTZ) {
-            System.out.println("Running PTZ roundtrip...");
-            PTZIntegrationRunner.runPTZRoundtrip(host, port);
+            System.out.println("PTZ helper unavailable in this build; skipping.");
             return;
         } else if (!useServo) {
-            byte[] payload = new byte[15];
-            payload[0] = 5; // example parameter (e.g., speed)
-            // call native C++ library to send camera command
-            byte[] resp = CamMonNative.sendCameraCommand(host, port, (byte)0x01, (byte)0x01, payload, 2000);
-            if (resp == null) {
-                System.err.println("No response or error from native sendCameraCommand");
-                return;
-            }
-            Protocol.Packet pkt = Protocol.parsePacket(resp);
-            if (pkt == null) { System.err.println("Invalid response"); return; }
-            System.out.println(String.format("Client(native): received addr=0x%02X func=0x%02X payload_len=%d", pkt.addr, pkt.func, pkt.data.length));
+            System.err.println("Camera control via JNI is not available in this build. Use 'servo' mode to call CamMonNative.setPTZ.");
+            return;
         } else {
-            // call native servo sender
-            System.out.println("Sending servo command via native C++ library...");
-            byte[] resp = CamMonNative.sendServoCommand(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, 0x01, 0x02, 2000);
-            if (resp == null) { System.err.println("No servo response or error"); return; }
-            System.out.println("Received " + resp.length + " bytes from native: " + bytesToHex(resp));
-            Protocol.ServoPacket parsed = Protocol.ServoPacket.parseServo(resp);
-            if (parsed == null) { System.err.println("Invalid servo response"); return; }
-            System.out.println(String.format("Client(native): received servo seq=%d az=%f el=%f", parsed.seq, parsed.azimuth, parsed.elevation));
+            // Use native setPTZ (declared in CamMonNative)
+            System.out.println("Sending servo command via CamMonNative.setPTZ...");
+            int rc = CamMonNative.setPTZ(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, Protocol.SERVO_DEVICE_TYPE, Protocol.SERVO_PACKET_TYPE_POINT, 2000);
+            if (rc <= 0) { System.err.println("setPTZ failed or timed out, rc=" + rc); return; }
+            System.out.println("setPTZ returned byteCount=" + rc);
+            byte[] last = CamMonNative.getLastStatus();
+            if (last != null) {
+                System.out.println("Last status (bytes): " + bytesToHex(last));
+            }
         }
     }
+
+    // UDP fallback removed. Client now only uses JNI methods declared in CamMonNative.
 }
