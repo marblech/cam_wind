@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <thread>
@@ -15,6 +16,9 @@
     #include <winsock2.h>
     #include <ws2tcpip.h>
     typedef int socklen_t;
+    #ifndef ssize_t
+    typedef std::ptrdiff_t ssize_t;
+    #endif
 #else
     #include <arpa/inet.h>
     #include <netinet/in.h>
