@@ -16,20 +16,39 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>
   <dependencies>
-    <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-api</artifactId>
-      <version>5.9.3</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-engine</artifactId>
-      <version>5.9.3</version>
-      <scope>test</scope>
-    </dependency>
+    <!-- Test dependencies removed for offline production build. Tests have been
+         converted into runnable helper classes under src/main/java when needed. -->
   </dependencies>
   <build>
+    <resources>
+      <resource>
+        <!-- Include native libraries copied to project native/ into the JAR under /native (if present) -->
+        <directory>${project.basedir}/native</directory>
+        <includes>
+          <include>cammon.dll</include>
+          <include>libcammon.so</include>
+        </includes>
+        <targetPath>native</targetPath>
+        <filtering>false</filtering>
+      </resource>
+      <resource>
+        <!-- Also pick native libs directly from the C++ build output so no extra copy step is required -->
+        <directory>${project.basedir}/../cam_mon_cpp/build/Debug</directory>
+        <includes>
+          <include>cammon.dll</include>
+        </includes>
+        <targetPath>native</targetPath>
+        <filtering>false</filtering>
+      </resource>
+      <resource>
+        <directory>${project.basedir}/../cam_mon_cpp/build</directory>
+        <includes>
+          <include>libcammon.so</include>
+        </includes>
+        <targetPath>native</targetPath>
+        <filtering>false</filtering>
+      </resource>
+    </resources>
     <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -53,6 +72,7 @@
             </environmentVariables>
         </configuration>
       </plugin>
+      <!-- Native libs are included via resources from ../cam_mon_cpp/build*/ so no extra plugin required -->
       <!-- Shade plugin to build a fat (shaded) JAR containing dependencies -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
