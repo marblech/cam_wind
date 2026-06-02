@@ -1,16 +1,20 @@
-﻿#pragma once
-
-#include <cstdint>
+﻿#ifndef CAM_WIND_SRC_CAMMON_API_H
+#define CAM_WIND_SRC_CAMMON_API_H
 
 /**
- * @file cammon_api.h
+ * @file src/cammon_api.h
  * @brief 摄像头监控底层 UDP 通信 API 声明
- * 
+ * @author marblech
+ * @date 2026-06-02
+ * @copyright SPDX: MIT OR as-project-specifies
+ *
  * 提供两层接口：
  * - 底层: cammon_send_udp_and_recv() 直接发送 UDP 并接收响应
- * - 高层: cammon_send_camera_command() / cammon_send_servo_command() 
+ * - 高层: cammon_send_camera_command() / cammon_send_servo_command()
  *   自动构建协议包再发送
  */
+
+#include <cstdint>
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,3 +110,5 @@ CAMMON_API int cammon_send_servo_command(const char* host, int port,
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* CAM_WIND_SRC_CAMMON_API_H */

@@ -4,6 +4,13 @@ project(cammon VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(Boost_DIR /home/marblech/boost_182/lib/cmake/Boost-1.82.0)
+
+set(Boost_USE_STATIC_LIBS OFF)    # 若 b2 构建的是共享库；静态则改为 ON
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_DEBUG_RUNTIME OFF)
+find_package(Boost REQUIRED COMPONENTS system filesystem date_time)
+
 # Output directory setup
 set(LIB_OUTPUT_DIR ${CMAKE_SOURCE_DIR}/build)
 
@@ -46,6 +53,12 @@ target_include_directories(cammon PUBLIC
     ${CMAKE_SOURCE_DIR}/plog/include
 )
 
+# Boost: add include dirs and link Boost components to cammon
+if(Boost_FOUND)
+    target_include_directories(cammon PUBLIC ${Boost_INCLUDE_DIRS})
+    target_link_libraries(cammon Boost::system Boost::filesystem Boost::date_time)
+endif()
+
 # Platform-specific settings
 if(WIN32)
     # Windows: Use Winsock, define exports
@@ -70,7 +83,7 @@ if(WIN32)
     )
 else()
     # Linux
-    target_link_libraries(cammon pthread)
+    target_link_libraries(cammon pthread Boost::system Boost::filesystem Boost::date_time)
     target_include_directories(cammon PRIVATE
         $ENV{JAVA_HOME}/include
         $ENV{JAVA_HOME}/include/linux

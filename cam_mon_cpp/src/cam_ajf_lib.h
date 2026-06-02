@@ -1,4 +1,33 @@
-﻿#pragma once
+﻿#ifndef CAM_WIND_SRC_CAM_AJF_LIB_H
+#define CAM_WIND_SRC_CAM_AJF_LIB_H
+
+/**
+ * @file src/cam_ajf_lib.h
+ * @brief Camera AJF 高层接口封装库
+ * @author marblech
+ * @date 2026-06-02
+ * @copyright SPDX: MIT OR as-project-specifies
+ *
+ * 本库封装了底层 UDP 通信细节，提供简洁的 C++ 接口用于：
+ * - 初始化/反初始化
+ * - 启动/停止状态监听线程
+ * - 获取/设置 PTZ (Pan/Tilt/Zoom) 参数
+ *
+ * 使用示例:
+ * @code
+ * CamAJFLib cam;
+ * cam.init("192.168.1.100", 4001);
+ * cam.start();
+ *
+ * auto ptz = cam.get_ptz();
+ * printf("Current: az=%f el=%f zoom=%f\n", ptz.azimuth, ptz.elevation, ptz.zoom);
+ *
+ * cam.set_ptz(90.0f, 30.0f, 5);
+ *
+ * cam.stop();
+ * cam.shutdown();
+ * @endcode
+ */
 
 #include <cstdint>
 #include <string>
@@ -9,32 +38,6 @@
 #include <vector>
 
 namespace cammon {
-
-/**
- * @file cam_ajf_lib.h
- * @brief Camera AJF 高层接口封装库
- * 
- * 本库封装了底层 UDP 通信细节，提供简洁的 C++ 接口用于：
- * - 初始化/反初始化
- * - 启动/停止状态监听线程
- * - 获取/设置 PTZ (Pan/Tilt/Zoom) 参数
- * 
- * 使用示例:
- * @code
- * CamAJFLib cam;
- * cam.init("192.168.1.100", 4001);
- * cam.start();
- * 
- * auto ptz = cam.get_ptz();
- * printf("Current: az=%f el=%f zoom=%f\n", ptz.azimuth, ptz.elevation, ptz.zoom);
- * 
- * cam.set_ptz(90.0f, 30.0f, 5);
- * 
- * cam.stop();
- * cam.shutdown();
- * @endcode
- */
-
 /// PTZ 状态数据结构
 struct PTZStatus {
     float azimuth = 0.0f;     ///< 方位角（度）
@@ -247,3 +250,5 @@ private:
 };
 
 } // namespace cammon
+
+#endif /* CAM_WIND_SRC_CAM_AJF_LIB_H */

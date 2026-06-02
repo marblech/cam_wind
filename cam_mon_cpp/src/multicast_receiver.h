@@ -1,4 +1,13 @@
-﻿#pragma once
+﻿#ifndef CAM_WIND_SRC_MULTICAST_RECEIVER_H
+#define CAM_WIND_SRC_MULTICAST_RECEIVER_H
+
+/**
+ * @file src/multicast_receiver.h
+ * @brief 组播接收器类声明
+ * @author marblech
+ * @date 2026-06-02
+ * @copyright SPDX: MIT OR as-project-specifies
+ */
 
 #include <cstdint>
 #include <cstddef>
@@ -198,3 +207,5 @@ private:
 };
 
 } // namespace cammon
+
+#endif /* CAM_WIND_SRC_MULTICAST_RECEIVER_H */
