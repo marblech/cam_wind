@@ -22,6 +22,8 @@ set(CAMMON_SOURCES
     src/cam_controller.cpp
     src/cam_ajf_lib.cpp
     src/multicast_receiver.cpp
+    src/load_settings.h
+    src/load_settings.cpp
 )
 
 set(CAMMON_HEADERS

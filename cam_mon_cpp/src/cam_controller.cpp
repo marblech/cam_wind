@@ -31,6 +31,12 @@ using ssize_t = int;
 #include <thread>
 #include <vector>
 
+// Boost.PropertyTree for config file reading (INI)
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/ini_parser.hpp>
+
+#include "load_settings.h"
+
 using namespace cammon;
 
 struct CamController {
@@ -214,6 +220,23 @@ extern "C" {
 
 CAMMON_API CamController* cam_controller_create() {
     return new CamController();
+}
+
+CAMMON_API int cam_controller_start_with_config(CamController* h, const char* config_file, const char* mcast_group) {
+    if (!h) return -1;
+    if (!config_file) return -2;
+    try {
+        set_conf_file(std::string(config_file));
+        int port = std::stoi(loadSetting("p2p", "listen_port"));
+        if (port <= 0) {
+            PLOG_ERROR << "[CamController] Invalid or missing p2p.listen_port in config: " << config_file;
+            return -3;
+        }
+        return cam_controller_start_ex(h, port, mcast_group);
+    } catch (const std::exception& e) {
+        PLOG_ERROR << "[CamController] Failed to read config " << config_file << ": " << e.what();
+        return -4;
+    }
 }
 
 CAMMON_API void cam_controller_destroy(CamController* h) {

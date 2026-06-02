@@ -53,6 +53,23 @@ CAMMON_API int cam_controller_start_ex(CamController* h, int port, const char* m
 static inline int cam_controller_start(CamController* h, int port) { return cam_controller_start_ex(h, port, nullptr); }
 
 /**
+ * @brief 使用外部配置文件启动控制器监听
+ *
+ * 从传入的配置文件中读取点对点监听端口（键名为 `p2p.listen_port`，INI 格式），
+ * 并在 `mcast_group` 为空时以点对点模式监听。返回值与 `cam_controller_start_ex` 相同。
+ *
+ * @param h [in] 控制器句柄
+ * @param config_file [in] 配置文件路径（INI 格式）
+ * @param mcast_group [in] 组播组地址（NULL 或空字符串表示不加入组播）
+ */
+CAMMON_API int cam_controller_start_with_config(CamController* h, const char* config_file, const char* mcast_group);
+
+/**
+ * @brief 便捷接口：只传入配置文件（不加入组播）
+ */
+static inline int cam_controller_start_with_config_simple(CamController* h, const char* config_file) { return cam_controller_start_with_config(h, config_file, nullptr); }
+
+/**
  * @brief 停止控制器监听（阻塞直到线程退出）
  * @param h [in] 控制器句柄
  */
