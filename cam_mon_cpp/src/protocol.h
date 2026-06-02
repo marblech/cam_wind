@@ -1,21 +1,25 @@
-﻿#pragma once
-
-#include <cstdint>
-#include <vector>
-#include <optional>
+﻿#ifndef CAM_WIND_SRC_PROTOCOL_H
+#define CAM_WIND_SRC_PROTOCOL_H
 
 /**
- * @file protocol.h
+ * @file src/protocol.h
  * @brief 摄像头监控系统通信协议定义
- * 
+ * @author marblech
+ * @date 2026-06-02
+ * @copyright SPDX: MIT OR as-project-specifies
+ *
  * 本头文件定义了摄像头监控系统所使用的通信协议格式，
  * 包括标准数据包结构、舵机专用数据包结构、设备地址枚举
  * 以及相关的序列化/反序列化函数。
- * 
+ *
  * 协议支持两种帧格式：
  * - 标准帧：以 0x0F 0xF0 开头，0xF0 0x0F 结尾，最小帧长 23 字节
  * - 舵机帧：以 0x7E 开头，固定帧长 72 字节
  */
+
+#include <cstdint>
+#include <vector>
+#include <optional>
 
 namespace cammon {
 
@@ -398,6 +402,7 @@ enum EnvControlFunction : uint8_t {
  *
  * 例如点选跟踪、识别辅助点选跟踪、设置波门、手动框选等。
  */
+
 enum TrackCommand : uint8_t {
     TRACK_CMD_POINT_SELECT_TRACK = 0x00, ///< 点选跟踪
     TRACK_CMD_RECOG_AID_SELECT   = 0x01, ///< 识别辅助点选跟踪
@@ -611,3 +616,5 @@ struct ServoPacket {
 };
 
 } // namespace cammon
+
+#endif /* CAM_WIND_SRC_PROTOCOL_H */
