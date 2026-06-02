@@ -1,4 +1,4 @@
-#include "protocol.h"
+﻿#include "protocol.h"
 #include "cammon_api.h"
 
 #ifdef _WIN32
@@ -22,6 +22,9 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <sstream>
+#include <iomanip>
+#include "plog_init.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,7 +75,7 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
     if (!g_winsock_initialized) ensure_winsock_init();
     SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock == INVALID_SOCKET) return -1;
-    fprintf(stderr, "[cammon_api] created socket=%d\n", (int)sock);
+    PLOG_INFO << "[cammon_api] created socket=" << (int)sock;
     sockaddr_in serv{};
     serv.sin_family = AF_INET;
     serv.sin_port = htons(port);
@@ -80,11 +83,11 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
         closesocket(sock);
         return -2;
     }
-    fprintf(stderr, "[cammon_api] target %s:%d\n", host, port);
+    PLOG_INFO << "[cammon_api] target " << host << ':' << port;
     int s = sendto(sock, reinterpret_cast<const char*>(outbuf), outlen, 0, (sockaddr*)&serv, sizeof(serv));
     if (s == SOCKET_ERROR) {
         int err = WSAGetLastError();
-        fprintf(stderr, "[cammon_api] sendto failed, WSAGetLastError=%d\n", err);
+        PLOG_ERROR << "[cammon_api] sendto failed, WSAGetLastError=" << err;
         closesocket(sock);
         return -3 - err;
     }
@@ -93,7 +96,7 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
     if (getsockname(sock, (sockaddr*)&local, &llen) == 0) {
         char buf[64] = {0};
         inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf));
-        fprintf(stderr, "[cammon_api] local bind %s:%d\n", buf, ntohs(local.sin_port));
+        PLOG_INFO << "[cammon_api] local bind " << buf << ':' << ntohs(local.sin_port);
     }
     if (timeout_ms > 0) {
         timeval tv; tv.tv_sec = timeout_ms / 1000; tv.tv_usec = (timeout_ms % 1000) * 1000;
@@ -104,7 +107,7 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
     int n = recvfrom(sock, reinterpret_cast<char*>(inbuf), inbuf_len, 0, (sockaddr*)&peer, &plen);
     if (n == SOCKET_ERROR) {
         int e = WSAGetLastError();
-        fprintf(stderr, "[cammon_api] recvfrom failed, WSAGetLastError=%d\n", e);
+        PLOG_ERROR << "[cammon_api] recvfrom failed, WSAGetLastError=" << e;
         closesocket(sock);
         return -10 - e;
     }
@@ -135,10 +138,10 @@ int cammon_send_camera_command(const char* host, int port, uint8_t func, uint8_t
     cammon::Packet p = cammon::make_camera_command(func, ctrl, data);
     auto out = p.serialize();
     // Debug
-    fprintf(stderr, "[C++ DEBUG] cammon_send_camera_command: host=%s port=%d func=%d ctrl=%d payload_len=%d timeout=%d\n", host, port, func, ctrl, payload_len, timeout_ms);
-    fprintf(stderr, "[C++ DEBUG] Camera packet serialized: size=%d\n", (int)out.size());
+    PLOG_DEBUG << "[C++ DEBUG] cammon_send_camera_command: host=" << host << " port=" << port << " func=" << (int)func << " ctrl=" << (int)ctrl << " payload_len=" << payload_len << " timeout=" << timeout_ms;
+    PLOG_DEBUG << "[C++ DEBUG] Camera packet serialized: size=" << (int)out.size();
     int result = cammon_send_udp_and_recv(host, port, out.data(), (int)out.size(), resp_buf, resp_buf_len, timeout_ms);
-    fprintf(stderr, "[C++ DEBUG] cammon_send_udp_and_recv returned: %d\n", result);
+    PLOG_DEBUG << "[C++ DEBUG] cammon_send_udp_and_recv returned: " << result;
     return result;
 }
 
@@ -154,16 +157,24 @@ int cammon_send_packet(const char* host, int port, uint8_t addr, uint8_t func, u
 
 int cammon_send_servo_command(const char* host, int port, float az, float el, float azs, float els, uint16_t target_distance, uint8_t seq, uint8_t control, uint8_t device_type, uint8_t packet_type, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
     auto out = cammon::build_servo_packet(az, el, azs, els, target_distance, seq, control, device_type, packet_type);
-    fprintf(stderr, "[C++ DEBUG] Sending servo packet: size=%d\n", (int)out.size());
-    fprintf(stderr, "[C++ DEBUG] Outgoing bytes: ");
-    for (size_t i = 0; i < out.size() && i < 200; ++i) fprintf(stderr, "%02X ", out[i]);
-    fprintf(stderr, "\n");
+    PLOG_DEBUG << "[C++ DEBUG] Sending servo packet: size=" << (int)out.size();
+    {
+        std::ostringstream oss;
+        oss << std::hex << std::uppercase << std::setfill('0');
+        for (size_t i = 0; i < out.size() && i < 200; ++i) {
+            oss << std::setw(2) << (int)out[i] << ' ';
+        }
+        PLOG_DEBUG << "[C++ DEBUG] Outgoing bytes: " << oss.str();
+    }
     int result = cammon_send_udp_and_recv(host, port, out.data(), (int)out.size(), resp_buf, resp_buf_len, timeout_ms);
-    fprintf(stderr, "[C++ DEBUG] cammon_send_udp_and_recv returned: %d\n", result);
+    PLOG_DEBUG << "[C++ DEBUG] cammon_send_udp_and_recv returned: " << result;
     if (result > 0) {
-        fprintf(stderr, "[C++ DEBUG] Response bytes: ");
-        for (int i = 0; i < result && i < 20; ++i) fprintf(stderr, "%02X ", resp_buf[i]);
-        fprintf(stderr, "\n");
+        std::ostringstream oss;
+        oss << std::hex << std::uppercase << std::setfill('0');
+        for (int i = 0; i < result && i < 20; ++i) {
+            oss << std::setw(2) << (int)resp_buf[i] << ' ';
+        }
+        PLOG_DEBUG << "[C++ DEBUG] Response bytes: " << oss.str();
     }
     return result;
 }

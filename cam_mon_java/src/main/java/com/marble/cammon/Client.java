@@ -1,69 +1,74 @@
 package com.marble.cammon;
 
+// Client only uses JNI interfaces from CamMonNative; UDP fallback removed
+
 /**
- * 客户端主程序 - 通过 JNI 调用 `cam_controller` 能力。
+ * 客户端主程序 - 通过 JNI 调用 C++ 原生库进行摄像头监控通信。
  * 
- * 当前设计下，JNI 仅暴露控制器语义接口：
- * 1. 启动/停止状态监听
- * 2. 读取最近一次解析出的 PTZ 状态
- * 3. 发送 PTZ 控制命令
+ * 此类演示了如何使用 CamMonNative 类发送相机控制和舵机控制命令。
+ * 支持两种通信模式：
+ * 1. 相机控制模式：发送可见光相机控制命令
+ * 2. 舵机控制模式：发送舵机运动控制命令
  * 
  * 使用方式：
- * - 发送 PTZ：`java com.marble.cammon.Client [host] [port] [az] [el]`
- * - 监听状态：`java com.marble.cammon.Client listen [listenPort]`
+ * - 默认模式: java com.marble.cammon.Client [host] [port]
+ * - 舵机模式: java com.marble.cammon.Client [host] [port] servo
  * 
  * @author marble
  * @version 1.0
  */
 public class Client {
+    
+    /**
+     * 将字节数组转换为十六进制字符串表示
+     * 
+     * @param bytes 要转换的字节数组
+     * @return 十六进制字符串（每个字节后跟一个空格）
+     */
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) sb.append(String.format("%02X ", b));
+        return sb.toString();
+    }
+
     /**
      * 客户端主入口点
      * 
-     * @param args 命令行参数
-     * @throws Exception 当原生调用失败时抛出异常
+     * 根据命令行参数决定发送相机控制命令还是舵机控制命令。
+     * 默认发送相机控制命令，添加 "servo" 参数时发送舵机控制命令。
+     * 
+     * @param args 命令行参数 [host] [port] [servo]
+     * @throws Exception 当网络通信或原生调用失败时抛出异常
      */
     public static void main(String[] args) throws Exception {
-        if (args.length > 0 && "listen".equalsIgnoreCase(args[0])) {
-            int listenPort = args.length > 1 ? Integer.parseInt(args[1]) : 5001;
-            String mcast = args.length > 2 ? args[2] : null;
-            runListenerDemo(listenPort, mcast);
-            return;
-        }
-
         String host = "127.0.0.1";
         int port = 4001;
-        float az = 123.45f;
-        float el = 10.0f;
         if (args.length > 0) host = args[0];
         if (args.length > 1) port = Integer.parseInt(args[1]);
-        if (args.length > 2) az = Float.parseFloat(args[2]);
-        if (args.length > 3) el = Float.parseFloat(args[3]);
-
-        System.out.println("Sending PTZ command via CamController JNI...");
-        int rc = CamMonNative.setPTZ(host, port, az, el, 1.5f, 0.5f, 100, 1, 1, 0x01, 0x02, 2000);
-        if (rc <= 0) {
-            System.err.println("setPTZ failed, rc=" + rc);
-            System.exit(1);
-        }
-        System.out.println("setPTZ succeeded, reply bytes=" + rc);
-    }
-
-    private static void runListenerDemo(int listenPort, String mcastGroup) throws Exception {
-        System.out.println("Starting PTZ listener on UDP port " + listenPort + "... (mcast=" + mcastGroup + ")");
-        boolean started = CamMonNative.startStatusListener(listenPort, mcastGroup);
-        if (!started) {
-            System.err.println("Failed to start native status listener");
-            System.exit(2);
-        }
-
-        Runtime.getRuntime().addShutdownHook(new Thread(CamMonNative::stopStatusListener));
-        System.out.println("Listener started. Press Ctrl+C to exit.");
-        while (true) {
-            PTZStatus ptz = CamMonNative.getPTZ();
-            if (ptz != null) {
-                System.out.println(String.format("PTZ az=%.3f el=%.3f ir=%.3f vis=%.3f", ptz.az, ptz.el, ptz.irFocus, ptz.visFocus));
+        boolean useServo = args.length > 2 && args[2].equals("servo");
+        boolean useCrosshair = args.length > 2 && args[2].equals("crosshair");
+        boolean usePTZ = args.length > 2 && args[2].equals("ptz");
+        if (useCrosshair) {
+            System.out.println("Crosshair helper unavailable in this build; skipping.");
+            return;
+        } else if (usePTZ) {
+            System.out.println("PTZ helper unavailable in this build; skipping.");
+            return;
+        } else if (!useServo) {
+            System.err.println("Camera control via JNI is not available in this build. Use 'servo' mode to call CamMonNative.setPTZ.");
+            return;
+        } else {
+            // Use native setPTZ (declared in CamMonNative)
+            System.out.println("Sending servo command via CamMonNative.setPTZ...");
+            int rc = CamMonNative.setPTZ(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, Protocol.SERVO_DEVICE_TYPE, Protocol.SERVO_PACKET_TYPE_POINT, 2000);
+            if (rc <= 0) { System.err.println("setPTZ failed or timed out, rc=" + rc); return; }
+            System.out.println("setPTZ returned byteCount=" + rc);
+            byte[] last = CamMonNative.getLastStatus();
+            if (last != null) {
+                System.out.println("Last status (bytes): " + bytesToHex(last));
             }
-            Thread.sleep(500);
         }
     }
+
+    // UDP fallback removed. Client now only uses JNI methods declared in CamMonNative.
 }

@@ -1,4 +1,4 @@
-#include "multicast_receiver.h"
+﻿#include "multicast_receiver.h"
 #include <cstdio>
 #include <cstring>
 
@@ -30,7 +30,7 @@ namespace cammon {
 // MulticastReceiver 实现
 // ============================================================================
 
-MulticastReceiver::MulticastReceiver()
+CAMMON_API MulticastReceiver::MulticastReceiver()
     : sock_(INVALID_SOCKET)
     , initialized_(false)
     , running_(false)
@@ -38,7 +38,7 @@ MulticastReceiver::MulticastReceiver()
 {
 }
 
-MulticastReceiver::~MulticastReceiver() {
+CAMMON_API MulticastReceiver::~MulticastReceiver() {
     stop();
 }
 

@@ -25,11 +25,25 @@ set(CAMMON_HEADERS
     src/multicast_receiver.h
 )
 
-# Build as shared library (DLL on Windows, SO on Linux)
-add_library(cammon SHARED ${CAMMON_SOURCES} ${CAMMON_HEADERS})
+# Build as static library to allow linking C++ symbols into tests
+# (avoids needing explicit __declspec(dllexport) on classes)
+add_library(cammon SHARED ${CAMMON_SOURCES} ${CAMMON_HEADERS}
+    src/plog_init.cpp)
+
+# Ensure CAMMON_EXPORTS is defined when building the DLL so symbols marked with
+# CAMMON_API expand to __declspec(dllexport)
+target_compile_definitions(cammon PRIVATE CAMMON_EXPORTS)
+
+# Prefer MSVC v142 toolset for compatibility with older consumers if building on Windows
+if(MSVC AND WIN32)
+    if(NOT DEFINED CMAKE_GENERATOR_TOOLSET)
+        set(CMAKE_GENERATOR_TOOLSET "v142" CACHE STRING "MSVC toolset" FORCE)
+    endif()
+endif()
 
 target_include_directories(cammon PUBLIC
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/plog/include
 )
 
 # Platform-specific settings

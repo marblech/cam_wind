@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file cammon_jni.cpp
  * @brief Camera Monitor JNI 桥接层实现
  * 
@@ -18,6 +18,8 @@
 #include <memory>
 #include <cstring>
 #include "cam_controller.h"
+#include "plog_init.h"
+#include <plog/Log.h>
 
 // singleton controller instance managed by JNI
 static CamController* g_controller = nullptr;
@@ -36,6 +38,15 @@ extern "C" {
  * @return true 如果启动成功，false 失败
  */
 JNIEXPORT jboolean JNICALL Java_com_marble_cammon_CamMonNative_startStatusListener(JNIEnv* env, jclass, jint port, jstring jmcastGroup) {
+    // ensure plog initialized
+    initPlog();
+    PLOG_INFO << "Java call: startStatusListener port=" << port << " mcastGroup=" << (jmcastGroup ? env->GetStringUTFChars(jmcastGroup, NULL) : "(null)");
+    if (jmcastGroup) {
+        // release the temporary GetStringUTFChars above
+        const char* tmp = env->GetStringUTFChars(jmcastGroup, NULL);
+        if (tmp) env->ReleaseStringUTFChars(jmcastGroup, tmp);
+    }
+
     if (g_controller) return JNI_FALSE;
     g_controller = cam_controller_create();
     if (!g_controller) return JNI_FALSE;
@@ -65,6 +76,7 @@ JNIEXPORT jboolean JNICALL Java_com_marble_cammon_CamMonNative_startStatusListen
  * 停止并销毁 CamController
  */
 JNIEXPORT void JNICALL Java_com_marble_cammon_CamMonNative_stopStatusListener(JNIEnv* env, jclass) {
+    PLOG_INFO << "Java call: stopStatusListener";
     if (!g_controller) return;
     cam_controller_stop(g_controller);
     cam_controller_destroy(g_controller);
@@ -80,6 +92,7 @@ JNIEXPORT void JNICALL Java_com_marble_cammon_CamMonNative_stopStatusListener(JN
  * @return 响应数据字节数组，失败返回 NULL
  */
 JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_getLastStatus(JNIEnv* env, jclass) {
+    PLOG_INFO << "Java call: getLastStatus";
     if (!g_controller) return NULL;
     const int RESP_MAX = 2048;
     uint8_t buf[RESP_MAX];
@@ -99,6 +112,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_marble_cammon_CamMonNative_getLastStatus(J
  * @return PTZStatus 对象，失败返回 NULL
  */
 JNIEXPORT jobject JNICALL Java_com_marble_cammon_CamMonNative_getPTZ(JNIEnv* env, jclass) {
+    PLOG_INFO << "Java call: getPTZ";
     if (!g_controller) return NULL;
     float az=0, el=0, ir=0, vis=0;
     int ok = cam_controller_get_ptz(g_controller, &az, &el, &ir, &vis);
@@ -136,11 +150,19 @@ JNIEXPORT jobject JNICALL Java_com_marble_cammon_CamMonNative_getPTZ(JNIEnv* env
  */
 JNIEXPORT jint JNICALL Java_com_marble_cammon_CamMonNative_setPTZ(JNIEnv* env, jclass, jstring jhost, jint port, jfloat az, jfloat el, jfloat azs, jfloat els, jint targetDistance, jint seq, jint control, jint deviceType, jint packetType, jint timeoutMs) {
     const char* host = env->GetStringUTFChars(jhost, NULL);
+    PLOG_INFO << "Java call: setPTZ host=" << (host?host:"(null)") << " port=" << port << " az=" << az << " el=" << el << " azs=" << azs << " els=" << els << " targetDistance=" << targetDistance << " seq=" << seq << " control=" << control << " deviceType=" << deviceType << " packetType=" << packetType << " timeoutMs=" << timeoutMs;
     const int RESP_MAX = 2048;
     std::unique_ptr<uint8_t[]> resp(new uint8_t[RESP_MAX]);
     int r = cam_controller_set_ptz(g_controller, host, (int)port, (float)az, (float)el, (float)azs, (float)els, (uint16_t)targetDistance, (uint8_t)seq, (uint8_t)control, (uint8_t)deviceType, (uint8_t)packetType, resp.get(), RESP_MAX, (int)timeoutMs);
     env->ReleaseStringUTFChars(jhost, host);
     return r;
+}
+
+// Optional: initialize plog once when JNI is loaded
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
+    initPlog();
+    PLOG_INFO << "JNI_OnLoad: plog initialized";
+    return JNI_VERSION_1_6;
 }
 
 } // extern "C"

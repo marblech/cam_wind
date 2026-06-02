@@ -1,4 +1,4 @@
-#include "cam_controller.h"
+﻿#include "cam_controller.h"
 #include "protocol.h"
 #include "cammon_api.h"
 
@@ -25,6 +25,7 @@ using ssize_t = int;
 #include <condition_variable>
 #include <cstring>
 #include <iostream>
+#include <plog/Log.h>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -68,7 +69,7 @@ static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
             servo_az = *reinterpret_cast<const float*>(&buf[28]);
             servo_el = *reinterpret_cast<const float*>(&buf[32]);
         }
-        std::cerr << "[CamController] Status addr=" << (int)addr << " seq=" << seq << " ir=" << ir_focus << " vis=" << vis_focus << " az=" << servo_az << " el=" << servo_el << "\n";
+        PLOG_INFO << "[CamController] Status addr=" << (int)addr << " seq=" << seq << " ir=" << ir_focus << " vis=" << vis_focus << " az=" << servo_az << " el=" << servo_el;
         return true;
     }
     // try Packet/ServoPacket parser if available
@@ -161,11 +162,11 @@ static void listener_loop(CamController* c) {
         }
 #endif
         if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq)) < 0) {
-            perror("cam_controller IP_ADD_MEMBERSHIP");
+            PLOG_ERROR << "cam_controller IP_ADD_MEMBERSHIP failed";
             // Not fatal: continue running but mark not multicast
             c->is_multicast = false;
         } else {
-            std::cerr << "[CamController] Joined multicast group " << c->mcast_group << "\n";
+            PLOG_INFO << "[CamController] Joined multicast group " << c->mcast_group;
         }
     }
 
@@ -179,7 +180,7 @@ static void listener_loop(CamController* c) {
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 #endif
 
-    std::cerr << "[CamController] Listening on UDP port " << c->listen_port << "\n";
+    PLOG_INFO << "[CamController] Listening on UDP port " << c->listen_port;
 
     while (c->running.load()) {
         std::vector<uint8_t> buf(2048);
@@ -206,29 +207,29 @@ static void listener_loop(CamController* c) {
     close(sock);
 #endif
     c->sock = -1;
-    std::cerr << "[CamController] Listener exiting\n";
+    PLOG_INFO << "[CamController] Listener exiting";
 }
 
 extern "C" {
 
-CamController* cam_controller_create() {
+CAMMON_API CamController* cam_controller_create() {
     return new CamController();
 }
 
-void cam_controller_destroy(CamController* h) {
+CAMMON_API void cam_controller_destroy(CamController* h) {
     if (!h) return;
     cam_controller_stop(h);
     delete h;
 }
 
-int cam_controller_start_ex(CamController* h, int port, const char* mcast_group) {
+CAMMON_API int cam_controller_start_ex(CamController* h, int port, const char* mcast_group) {
     if (!h) return -1;
     if (h->running.load()) return -2; // already running
     h->listen_port = port;
     if (mcast_group && mcast_group[0] != '\0') {
         h->is_multicast = true;
         h->mcast_group = mcast_group;
-        std::cerr << "[CamController] Starting in multicast mode, group=" << h->mcast_group << " port=" << port << "\n";
+        PLOG_INFO << "[CamController] Starting in multicast mode, group=" << h->mcast_group << " port=" << port;
     } else {
         h->is_multicast = false;
         h->mcast_group.clear();
@@ -244,7 +245,7 @@ int cam_controller_start_ex(CamController* h, int port, const char* mcast_group)
     return 0;
 }
 
-void cam_controller_stop(CamController* h) {
+CAMMON_API void cam_controller_stop(CamController* h) {
     if (!h) return;
     if (!h->running.load()) return;
     h->running.store(false);
@@ -256,9 +257,9 @@ void cam_controller_stop(CamController* h) {
             mreq.imr_interface.s_addr = INADDR_ANY;
             if (setsockopt(h->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char*)&mreq, sizeof(mreq)) < 0) {
                 // best-effort; don't fail stop on this
-                perror("cam_controller IP_DROP_MEMBERSHIP");
+                PLOG_ERROR << "cam_controller IP_DROP_MEMBERSHIP failed";
             } else {
-                std::cerr << "[CamController] Left multicast group " << h->mcast_group << "\n";
+                PLOG_INFO << "[CamController] Left multicast group " << h->mcast_group;
             }
         }
 
@@ -273,7 +274,7 @@ void cam_controller_stop(CamController* h) {
     if (h->thr.joinable()) h->thr.join();
 }
 
-int cam_controller_get_last(CamController* h, uint8_t* buf, int buflen) {
+CAMMON_API int cam_controller_get_last(CamController* h, uint8_t* buf, int buflen) {
     if (!h) return 0;
     std::lock_guard<std::mutex> lk(h->mtx);
     if (h->last_packet.empty()) return 0;
@@ -282,7 +283,7 @@ int cam_controller_get_last(CamController* h, uint8_t* buf, int buflen) {
     return copy_len;
 }
 
-int cam_controller_get_ptz(CamController* h, float* out_az, float* out_el, float* out_ir_focus, float* out_vis_focus) {
+CAMMON_API int cam_controller_get_ptz(CamController* h, float* out_az, float* out_el, float* out_ir_focus, float* out_vis_focus) {
     if (!h) return 0;
     std::lock_guard<std::mutex> lk(h->mtx);
     if (h->last_packet.empty()) return 0;
@@ -306,7 +307,7 @@ int cam_controller_get_ptz(CamController* h, float* out_az, float* out_el, float
     return 1;
 }
 
-int cam_controller_set_ptz(CamController* h, const char* host, int port,
+CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, int port,
                           float az, float el, float azs, float els,
                           uint16_t target_distance, uint8_t seq, uint8_t control,
                           uint8_t device_type, uint8_t packet_type,
