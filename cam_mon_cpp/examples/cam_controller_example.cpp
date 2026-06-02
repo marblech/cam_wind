@@ -13,28 +13,50 @@
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <port> [mcast_group]\n";
+        std::cerr << "   or: " << argv[0] << " -c <config_file>    # use config file (INI)\n";
         return 1;
     }
-    int port = std::atoi(argv[1]);
-    const char* mcast = nullptr;
-    if (argc >= 3) mcast = argv[2];
 
+    const char* mcast = nullptr;
     CamController* c = cam_controller_create();
     if (!c) {
         std::cerr << "Failed to create CamController\n";
         return 1;
     }
 
-    int r = cam_controller_start_ex(c, port, mcast);
-    if (r != 0) {
-        std::cerr << "cam_controller_start_ex failed: " << r << "\n";
-        cam_controller_destroy(c);
-        return 1;
-    }
+    int r = 0;
 
-    std::cerr << "Started listener on port " << port;
-    if (mcast) std::cerr << " (multicast group=" << mcast << ")";
-    std::cerr << "\n";
+    // If first arg is -c, use configuration file to start (p2p.listen_port in INI)
+    if (std::strcmp(argv[1], "-c") == 0) {
+        if (argc < 3) {
+            std::cerr << "Missing config file after -c\n";
+            cam_controller_destroy(c);
+            return 1;
+        }
+        const char* config_file = argv[2];
+        if (argc >= 4) mcast = argv[3];
+        std::cerr << "Starting using config file: " << config_file << "\n";
+        r = cam_controller_start_with_config(c, config_file, mcast);
+        if (r != 0) {
+            std::cerr << "cam_controller_start_with_config failed: " << r << "\n";
+            cam_controller_destroy(c);
+            return 1;
+        }
+        std::cerr << "Started listener using config " << config_file << "\n";
+    } else {
+        // Fallback: numeric port provided
+        int port = std::atoi(argv[1]);
+        if (argc >= 3) mcast = argv[2];
+        r = cam_controller_start_ex(c, port, mcast);
+        if (r != 0) {
+            std::cerr << "cam_controller_start_ex failed: " << r << "\n";
+            cam_controller_destroy(c);
+            return 1;
+        }
+        std::cerr << "Started listener on port " << port;
+        if (mcast) std::cerr << " (multicast group=" << mcast << ")";
+        std::cerr << "\n";
+    }
 
     // run for a short period, printing last packet length and PTZ every second
     for (int i = 0; i < 10; ++i) {

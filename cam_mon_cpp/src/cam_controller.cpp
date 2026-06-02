@@ -71,9 +71,11 @@ static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
             ir_focus = *reinterpret_cast<const float*>(&buf[6]);
             vis_focus = *reinterpret_cast<const float*>(&buf[10]);
         }
-        if (buf.size() > 35) {
-            servo_az = *reinterpret_cast<const float*>(&buf[28]);
-            servo_el = *reinterpret_cast<const float*>(&buf[32]);
+        if (buf.size() > 33) {
+            // According to protocol and sender (payload data starts at index 5):
+            // servo_az is at bytes [26-29], servo_el at [30-33]
+            servo_az = *reinterpret_cast<const float*>(&buf[26]);
+            servo_el = *reinterpret_cast<const float*>(&buf[30]);
         }
         PLOG_INFO << "[CamController] Status addr=" << (int)addr << " seq=" << seq << " ir=" << ir_focus << " vis=" << vis_focus << " az=" << servo_az << " el=" << servo_el;
         return true;
@@ -311,16 +313,16 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, float* out_az, float* ou
     std::lock_guard<std::mutex> lk(h->mtx);
     if (h->last_packet.empty()) return 0;
     const std::vector<uint8_t>& buf = h->last_packet;
-    // Expect positions per protocol: ir_focus bytes 6-9, vis_focus 10-13, servo_az 28-31, servo_el 32-35
+    // Expect positions per protocol: ir_focus bytes 6-9, vis_focus 10-13, servo_az 26-29, servo_el 30-33
     bool ok = true;
     float ir = 0.0f, vis = 0.0f, az = 0.0f, el = 0.0f;
     if (buf.size() >= 14) {
         std::memcpy(&ir, &buf[6], sizeof(float));
         std::memcpy(&vis, &buf[10], sizeof(float));
     } else ok = false;
-    if (buf.size() >= 36) {
-        std::memcpy(&az, &buf[28], sizeof(float));
-        std::memcpy(&el, &buf[32], sizeof(float));
+    if (buf.size() >= 34) {
+        std::memcpy(&az, &buf[26], sizeof(float));
+        std::memcpy(&el, &buf[30], sizeof(float));
     } else ok = false;
     if (!ok) return 0;
     if (out_az) *out_az = az;

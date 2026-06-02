@@ -312,6 +312,21 @@ struct LoadStatusReport {
  */
 std::optional<LoadStatusReport> parse_load_status_report(const std::vector<uint8_t>& buf);
 
+/**
+ * @brief 兼容的负载状态解析器
+ *
+ * 一些测试发送端（例如 Python 工具）可能会把负载状态封装在标准帧
+ * 或者直接以上报帧格式发送。本函数会尝试：
+ *  - 若缓冲区以上报帧头 `REPORT_HDR1, REPORT_HDR2` 开头，则调用
+ *    `LoadStatusReport::deserialize` 进行解析；
+ *  - 否则若以标准帧头 `FRAME_HDR1, FRAME_HDR2` 开头，则尝试解析为
+ *    `Packet`，并从其中抽取负载数据区去填充 `LoadStatusReport`。
+ *
+ * 这样可以在不改变现有代码的前提下兼容 Python 本地点对点发送器
+ * 以及其他用不同封装方式发送的负载状态报文。
+ */
+std::optional<LoadStatusReport> parse_payload_status(const std::vector<uint8_t>& buf);
+
 // ============================================================================
 // 标准数据包结构
 // ============================================================================

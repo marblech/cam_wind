@@ -617,4 +617,97 @@ std::optional<LoadStatusReport> parse_load_status_report(const std::vector<uint8
     return LoadStatusReport::deserialize(buf);
 }
 
+/**
+ * @brief 兼容解析来自不同发送端的负载状态报文
+ *
+ * 尝试按以下顺序解析：
+ * 1. 以上报帧头 (REPORT_HDR1, REPORT_HDR2) 开头 -> 直接反序列化为 LoadStatusReport
+ * 2. 以标准帧头 (FRAME_HDR1, FRAME_HDR2) 开头 -> 解析为 Packet，然后尝试从 Packet::data 中抽取
+ *    41 字节的负载数据并填充 LoadStatusReport（frame_seq 可能丢失，设为 0）。
+ */
+std::optional<LoadStatusReport> parse_payload_status(const std::vector<uint8_t>& buf) {
+    // 1) 上报帧直接解析
+    if (buf.size() >= REPORT_LOAD_STATUS_FRAME_LEN && buf[0] == REPORT_HDR1 && buf[1] == REPORT_HDR2) {
+        return LoadStatusReport::deserialize(buf);
+    }
+
+    // 2) 标准帧包裹的情况：尝试解析为 Packet
+    if (buf.size() >= 2 && buf[0] == FRAME_HDR1 && buf[1] == FRAME_HDR2) {
+        auto p_opt = Packet::deserialize(buf);
+        if (!p_opt.has_value()) return std::nullopt;
+        Packet p = p_opt.value();
+
+        // 期待 Packet.data 中包含 41 字节的负载数据（与 LoadStatusReport 的数据区对应）
+        if (p.data.size() < REPORT_LOAD_STATUS_DATA_LEN) {
+            // 不足以填充负载数据，解析失败
+            return std::nullopt;
+        }
+
+        LoadStatusReport r;
+        // addr 来自 Packet.addr（与原上报的地址位语义相近）
+        r.addr = p.addr;
+        r.frame_seq = 0; // 在这种封装下可能没有独立帧序号，保留为 0
+
+        // 从 p.data 的前 41 字节抽取字段（与 LoadStatusReport::deserialize 中的数据区布局一致）
+        size_t idx = 0;
+        // [0] reserved1
+        r.reserved1 = p.data[idx++];
+
+        auto read_u32 = [&](uint32_t &out){
+            out = (uint32_t)p.data[idx] | ((uint32_t)p.data[idx+1]<<8) | ((uint32_t)p.data[idx+2]<<16) | ((uint32_t)p.data[idx+3]<<24);
+            idx += 4;
+        };
+        uint32_t tmp32 = 0;
+        // [1-4] ir_focal_length
+        read_u32(tmp32); memcpy(&r.ir_focal_length, &tmp32, 4);
+        // [5-8] vis_focal_length
+        read_u32(tmp32); memcpy(&r.vis_focal_length, &tmp32, 4);
+        // [9-12] az_aberration
+        read_u32(tmp32); memcpy(&r.az_aberration, &tmp32, 4);
+        // [13-16] el_aberration
+        read_u32(tmp32); memcpy(&r.el_aberration, &tmp32, 4);
+        // [17-20] env ctrl bytes
+        r.env_ctrl_byte1 = p.data[idx++];
+        r.env_ctrl_byte2 = p.data[idx++];
+        r.env_ctrl_byte3 = p.data[idx++];
+        r.env_ctrl_byte4 = p.data[idx++];
+        // [21-24] servo az
+        read_u32(tmp32); memcpy(&r.servo_azimuth, &tmp32, 4);
+        // [25-28] servo el
+        read_u32(tmp32); memcpy(&r.servo_elevation, &tmp32, 4);
+        // [29] self_check
+        r.self_check_status = p.data[idx++];
+        // [30] vis_cam_image_status
+        r.vis_cam_image_status = p.data[idx++];
+        // [31] vis_cam_comm_status
+        r.vis_cam_comm_status = p.data[idx++];
+        // [32] tracker_temp
+        r.tracker_temp = p.data[idx++];
+        // [33] vis_cam_temp
+        r.vis_cam_temp = p.data[idx++];
+        // [34] electronic_zoom_status
+        r.electronic_zoom_status = p.data[idx++];
+        // [35] defog_status
+        r.defog_status = p.data[idx++];
+        // [36] current_exposure
+        r.current_exposure = p.data[idx++];
+        // [37] detect_recog_threshold
+        r.detect_recog_threshold = p.data[idx++];
+        // [38] track_threshold
+        r.track_threshold = p.data[idx++];
+        // [39-40] memory_track_time
+        r.memory_track_time = (uint16_t)p.data[idx] | ((uint16_t)p.data[idx+1] << 8);
+        idx += 2;
+
+        // 帧尾/校验项在 Packet 封装里由 Packet 自身负责，这里我们不再二次校验
+        r.checksum = 0;
+        r.tail1 = REPORT_TAIL1;
+        r.tail2 = REPORT_TAIL2;
+
+        return r;
+    }
+
+    return std::nullopt;
+}
+
 } // namespace cammon
