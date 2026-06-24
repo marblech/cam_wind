@@ -48,14 +48,14 @@ namespace cammon {
 // ============================================================================
 
 /**
- * @brief 组播地址
+ * @brief 默认组播地址
  * 
  * 用于接收开发板状态上报报文的组播组地址
  */
 static constexpr const char* MULTICAST_GROUP_ADDR = "239.255.43.21";
 
 /**
- * @brief 组播端口
+ * @brief 默认组播端口
  * 
  * 用于接收开发板状态上报报文的端口
  */
@@ -117,9 +117,14 @@ public:
      * 
      * @param bind_addr 绑定的本地地址，"0.0.0.0" 表示所有接口（默认）
      * @param iface_addr 组播接口地址，默认为空（使用系统默认）
+     * @param multicast_addr 组播组地址，默认为 MULTICAST_GROUP_ADDR
+     * @param multicast_port 组播端口，默认为 MULTICAST_GROUP_PORT
      * @return true 初始化成功，false 初始化失败
      */
-    bool init(const char* bind_addr = "0.0.0.0", const char* iface_addr = "");
+    bool init(const char* bind_addr = "0.0.0.0",
+              const char* iface_addr = "",
+              const char* multicast_addr = MULTICAST_GROUP_ADDR,
+              int multicast_port = MULTICAST_GROUP_PORT);
 
     /**
      * @brief 启动组播接收线程
@@ -170,6 +175,18 @@ public:
      */
     int getPacketCount() const { return packet_count_.load(); }
 
+    /**
+     * @brief 获取组播地址
+     * @return 组播地址字符串
+     */
+    const std::string& getMulticastAddr() const { return multicast_addr_; }
+
+    /**
+     * @brief 获取组播端口
+     * @return 组播端口
+     */
+    int getMulticastPort() const { return multicast_port_; }
+
 private:
     /**
      * @brief 接收线程函数
@@ -204,6 +221,8 @@ private:
     // 组播配置
     std::string bind_addr_;
     std::string iface_addr_;
+    std::string multicast_addr_;
+    int multicast_port_;
 };
 
 } // namespace cammon

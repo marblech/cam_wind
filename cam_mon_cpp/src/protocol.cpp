@@ -9,23 +9,25 @@ namespace cammon {
 // ============================================================================
 
 /**
- * @brief 计算 XOR 校验和
+ * @brief 计算和校验（累加取低8位）
  * 
- * 对输入字节向量中的所有字节进行逐位异或运算，生成 1 字节校验和。
+ * 对输入字节向量中的所有字节进行累加运算，取低8位作为校验和。
  * 该校验和用于验证数据包完整性，计算范围为地址字节到数据字节末尾。
  * 
+ * 协议 3.2 节定义：校验位 = 除帧头帧尾外所有字节的和校验 (mod 256)
+ * 即: checksum = sum(addr, func, ctrl, data...) mod 256
+ * 
  * @param bytes 输入字节向量
- * @return uint8_t 1 字节 XOR 校验和
+ * @return uint8_t 1 字节和校验和
  */
 uint8_t compute_checksum(const std::vector<uint8_t>& bytes) {
-    // 协议 3.2 节定义：校验位 = 除帧头帧尾外所有字节的和校验 (mod 256)
-    // 即: checksum = sum(addr, func, ctrl, data...) mod 256
     uint8_t cs = 0;
     for (auto b : bytes) cs = static_cast<uint8_t>(cs + b);
     return cs;
 }
 
-// 为兼容旧代码保留别名
+// 为兼容旧代码保留别名（实际是和校验，非XOR校验）
+// 注意：虽然函数名含 xor，但实际实现与 compute_checksum 相同，均为和校验 (sum mod 256)
 uint8_t compute_xor_checksum(const std::vector<uint8_t>& bytes) {
     return compute_checksum(bytes);
 }
@@ -389,29 +391,26 @@ namespace cammon {
  * 序列化格式: [1F F1][地址][帧序号][数据41字节][校验][F1 1F]
  * 总长度: 49 字节
  * 
- * 数据区布局（字节号从0开始，相对于数据区起始）：
- * - [0]: 保留
- * - [1-4]: 红外焦距 (float)
- * - [5-8]: 白光焦距 (float)
- * - [9-12]: 方位脱靶量 (float)
- * - [13-16]: 俯仰脱靶量 (float)
- * - [17-20]: 环控设备状态 (4字节)
- * - [21-24]: 伺服方位角 (float)
- * - [25-28]: 伺服俯仰角 (float)
- * - [29]: 自检状态
- * - [30]: 可见光摄像机图像状态
- * - [31]: 可见光摄像机通信状态
- * - [32]: 跟踪处理器温度
- * - [33]: 可见光摄像机温度
- * - [34]: 电子放大状态
- * - [35]: 电子透雾状态
- * - [36]: 当前曝光时间
- * - [37]: 当前检测/识别阈值
- * - [38]: 当前跟踪阈值
- * - [39-40]: 当前记忆跟踪时间 (uint16_t)
- * 
- * 注意：协议文档中字节号从帧头开始计算，此处转换为相对于数据区的偏移。
- * 协议字节号0-1为帧头，2为地址，3-4为帧序号，5开始为数据区。
+ * 数据区布局（协议字节号从5开始，相对于数据区偏移 = 协议字节号 - 5）：
+ * - [5] 伺服工作模式
+ * - [6-9] 红外焦距 (float)
+ * - [10-13] 白光/可见光焦距 (float)
+ * - [14-17] 方位脱靶量 (float)
+ * - [18-21] 俯仰脱靶量 (float)
+ * - [22-25] 环控设备状态 (4字节)
+ * - [26-29] 伺服方位角 (float)
+ * - [30-33] 伺服俯仰角 (float)
+ * - [34] 自检状态
+ * - [35] 可见光摄像机图像状态
+ * - [36] 可见光摄像机通信状态
+ * - [37] 红外摄像机图像状态
+ * - [38] 红外摄像机通信状态
+ * - [39] 伺服故障码
+ * - [40] 电子透雾状态
+ * - [41] 雨刷状态
+ * - [42] 加热状态
+ * - [43] 俯仰伺服故障码
+ * - [44-45] 当前记忆跟踪时间 (uint16_t)
  * 
  * @return std::vector<uint8_t> 序列化后的49字节向量
  */
@@ -429,14 +428,14 @@ std::vector<uint8_t> LoadStatusReport::serialize() {
     // 帧序号 (小端)
     write_le_uint16(out, frame_seq);
     
-    // 数据区 (从协议字节号5开始，对应数据区偏移0)
-    // [5] 保留
-    out.push_back(reserved1);
+    // 数据区 (协议字节号从5开始)
+    // [5] 伺服工作模式
+    out.push_back(servo_work_mode);
     
     // [6-9] 红外焦距 (float)
     write_le_float(out, ir_focal_length);
     
-    // [10-13] 白光焦距 (float)
+    // [10-13] 白光/可见光焦距 (float)
     write_le_float(out, vis_focal_length);
     
     // [14-17] 方位脱靶量 (float)
@@ -466,38 +465,34 @@ std::vector<uint8_t> LoadStatusReport::serialize() {
     // [36] 可见光摄像机通信状态
     out.push_back(vis_cam_comm_status);
     
-    // [37] 跟踪处理器温度
-    out.push_back(tracker_temp);
+    // [37] 红外摄像机图像状态
+    out.push_back(ir_cam_image_status);
     
-    // [38] 可见光摄像机温度
-    out.push_back(vis_cam_temp);
+    // [38] 红外摄像机通信状态
+    out.push_back(ir_cam_comm_status);
     
-    // [39] 电子放大状态
-    out.push_back(electronic_zoom_status);
+    // [39] 伺服故障码
+    out.push_back(servo_fault_code);
     
     // [40] 电子透雾状态
     out.push_back(defog_status);
     
-    // [41] 当前曝光时间
-    out.push_back(current_exposure);
+    // [41] 雨刷状态
+    out.push_back(wiper_status);
     
-    // [42] 当前检测/识别阈值
-    out.push_back(detect_recog_threshold);
+    // [42] 加热状态
+    out.push_back(heater_status);
     
-    // [43] 当前跟踪阈值
-    out.push_back(track_threshold);
+    // [43] 俯仰伺服故障码
+    out.push_back(el_servo_fault_code);
     
     // [44-45] 当前记忆跟踪时间 (uint16_t 小端)
     write_le_uint16(out, memory_track_time);
     
     // 校验和：地址位到数据位和校验取低位1字节
     // 即: sum(addr, frame_seq[0], frame_seq[1], data...) mod 256
-    // 注意：协议定义"地址位到数据位和校验"，地址位之后的所有字节
     std::vector<uint8_t> csrange;
     csrange.push_back(addr);
-    // 帧序号已在上面以字节形式写入out，需要从out中提取
-    // out当前长度 = 2(帧头) + 1(地址) + 2(帧序号) + 41(数据) = 46
-    // 数据区从out[5]开始
     for (size_t i = 3; i < out.size(); ++i) {
         csrange.push_back(out[i]);
     }
@@ -533,46 +528,65 @@ std::optional<LoadStatusReport> LoadStatusReport::deserialize(const std::vector<
     r.frame_seq = (uint16_t)buf[idx] | ((uint16_t)buf[idx+1] << 8);
     idx += 2;
     
-    // 数据区
-    r.reserved1 = buf[idx++];                                    // [5]
-    // [6-9] 红外焦距
+    // 数据区 (协议字节号从5开始，buf索引 = 5)
+    // [5] 伺服工作模式
+    r.servo_work_mode = buf[idx++];
+    
+    // [6-9] 红外焦距 (float)
     { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.ir_focal_length, &v, 4); idx += 4; }
-    // [10-13] 白光焦距
+    
+    // [10-13] 白光/可见光焦距 (float)
     { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.vis_focal_length, &v, 4); idx += 4; }
-    // [14-17] 方位脱靶量
+    
+    // [14-17] 方位脱靶量 (float)
     { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.az_aberration, &v, 4); idx += 4; }
-    // [18-21] 俯仰脱靶量
+    
+    // [18-21] 俯仰脱靶量 (float)
     { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.el_aberration, &v, 4); idx += 4; }
-    // [22-25] 环控设备
+    
+    // [22-25] 环控设备状态 (4字节)
     r.env_ctrl_byte1 = buf[idx++];
     r.env_ctrl_byte2 = buf[idx++];
     r.env_ctrl_byte3 = buf[idx++];
     r.env_ctrl_byte4 = buf[idx++];
-    // [26-29] 伺服方位角
+    
+    // [26-29] 伺服方位角 (float)
     { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.servo_azimuth, &v, 4); idx += 4; }
-    // [30-33] 伺服俯仰角
+    
+    // [30-33] 伺服俯仰角 (float)
     { uint32_t v; v = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1]<<8) | ((uint32_t)buf[idx+2]<<16) | ((uint32_t)buf[idx+3]<<24); memcpy(&r.servo_elevation, &v, 4); idx += 4; }
+    
     // [34] 自检状态
     r.self_check_status = buf[idx++];
+    
     // [35] 可见光摄像机图像状态
     r.vis_cam_image_status = buf[idx++];
+    
     // [36] 可见光摄像机通信状态
     r.vis_cam_comm_status = buf[idx++];
-    // [37] 跟踪处理器温度
-    r.tracker_temp = buf[idx++];
-    // [38] 可见光摄像机温度
-    r.vis_cam_temp = buf[idx++];
-    // [39] 电子放大状态
-    r.electronic_zoom_status = buf[idx++];
+    
+    // [37] 红外摄像机图像状态
+    r.ir_cam_image_status = buf[idx++];
+    
+    // [38] 红外摄像机通信状态
+    r.ir_cam_comm_status = buf[idx++];
+    
+    // [39] 伺服故障码
+    r.servo_fault_code = buf[idx++];
+    
     // [40] 电子透雾状态
     r.defog_status = buf[idx++];
-    // [41] 当前曝光时间
-    r.current_exposure = buf[idx++];
-    // [42] 当前检测/识别阈值
-    r.detect_recog_threshold = buf[idx++];
-    // [43] 当前跟踪阈值
-    r.track_threshold = buf[idx++];
-    // [44-45] 记忆跟踪时间
+    
+    // [41] 雨刷状态
+    r.wiper_status = buf[idx++];
+    
+    // [42] 加热状态
+    r.heater_status = buf[idx++];
+    
+    // [43] 俯仰伺服故障码
+    r.el_servo_fault_code = buf[idx++];
+    
+    // [44-45] 记忆跟踪时间 (uint16_t 小端)
     r.memory_track_time = (uint16_t)buf[idx] | ((uint16_t)buf[idx+1] << 8);
     idx += 2;
     
@@ -589,10 +603,10 @@ std::optional<LoadStatusReport> LoadStatusReport::deserialize(const std::vector<
         return std::nullopt;
     }
 
-    // 验证校验和：计算地址位到数据位（包含帧序号低字节）之和的低位
+    // 验证校验和：计算地址位到数据位（包含帧序号）之和的低位
     std::vector<uint8_t> csrange;
     csrange.push_back(r.addr);
-    // 地址后的第一个字节是帧序号低字节，索引为 3，数据区一直到索引 45
+    // 地址后的字节从索引3开始，数据区一直到索引45 (REPORT_LOAD_STATUS_FRAME_LEN - 3 = 46)
     for (size_t i = 3; i < REPORT_LOAD_STATUS_FRAME_LEN - 3; ++i) {
         csrange.push_back(buf[i]);
     }
@@ -624,6 +638,8 @@ std::optional<LoadStatusReport> parse_load_status_report(const std::vector<uint8
  * 1. 以上报帧头 (REPORT_HDR1, REPORT_HDR2) 开头 -> 直接反序列化为 LoadStatusReport
  * 2. 以标准帧头 (FRAME_HDR1, FRAME_HDR2) 开头 -> 解析为 Packet，然后尝试从 Packet::data 中抽取
  *    41 字节的负载数据并填充 LoadStatusReport（frame_seq 可能丢失，设为 0）。
+ *
+ * 注意：此函数用于兼容旧格式的数据，新代码应使用 LoadStatusReport::deserialize。
  */
 std::optional<LoadStatusReport> parse_payload_status(const std::vector<uint8_t>& buf) {
     // 1) 上报帧直接解析
@@ -649,53 +665,59 @@ std::optional<LoadStatusReport> parse_payload_status(const std::vector<uint8_t>&
         r.frame_seq = 0; // 在这种封装下可能没有独立帧序号，保留为 0
 
         // 从 p.data 的前 41 字节抽取字段（与 LoadStatusReport::deserialize 中的数据区布局一致）
+        // 协议字节号从5开始，对应data[0]为servo_work_mode
         size_t idx = 0;
-        // [0] reserved1
-        r.reserved1 = p.data[idx++];
+        
+        // [5] 伺服工作模式
+        r.servo_work_mode = p.data[idx++];
 
         auto read_u32 = [&](uint32_t &out){
             out = (uint32_t)p.data[idx] | ((uint32_t)p.data[idx+1]<<8) | ((uint32_t)p.data[idx+2]<<16) | ((uint32_t)p.data[idx+3]<<24);
             idx += 4;
         };
         uint32_t tmp32 = 0;
-        // [1-4] ir_focal_length
+        
+        // [6-9] 红外焦距
         read_u32(tmp32); memcpy(&r.ir_focal_length, &tmp32, 4);
-        // [5-8] vis_focal_length
+        // [10-13] 白光/可见光焦距
         read_u32(tmp32); memcpy(&r.vis_focal_length, &tmp32, 4);
-        // [9-12] az_aberration
+        // [14-17] 方位脱靶量
         read_u32(tmp32); memcpy(&r.az_aberration, &tmp32, 4);
-        // [13-16] el_aberration
+        // [18-21] 俯仰脱靶量
         read_u32(tmp32); memcpy(&r.el_aberration, &tmp32, 4);
-        // [17-20] env ctrl bytes
+        
+        // [22-25] 环控设备 bytes
         r.env_ctrl_byte1 = p.data[idx++];
         r.env_ctrl_byte2 = p.data[idx++];
         r.env_ctrl_byte3 = p.data[idx++];
         r.env_ctrl_byte4 = p.data[idx++];
-        // [21-24] servo az
+        
+        // [26-29] 伺服方位角
         read_u32(tmp32); memcpy(&r.servo_azimuth, &tmp32, 4);
-        // [25-28] servo el
+        // [30-33] 伺服俯仰角
         read_u32(tmp32); memcpy(&r.servo_elevation, &tmp32, 4);
-        // [29] self_check
+        
+        // [34] 自检状态
         r.self_check_status = p.data[idx++];
-        // [30] vis_cam_image_status
+        // [35] 可见光摄像机图像状态
         r.vis_cam_image_status = p.data[idx++];
-        // [31] vis_cam_comm_status
+        // [36] 可见光摄像机通信状态
         r.vis_cam_comm_status = p.data[idx++];
-        // [32] tracker_temp
-        r.tracker_temp = p.data[idx++];
-        // [33] vis_cam_temp
-        r.vis_cam_temp = p.data[idx++];
-        // [34] electronic_zoom_status
-        r.electronic_zoom_status = p.data[idx++];
-        // [35] defog_status
+        // [37] 红外摄像机图像状态
+        r.ir_cam_image_status = p.data[idx++];
+        // [38] 红外摄像机通信状态
+        r.ir_cam_comm_status = p.data[idx++];
+        // [39] 伺服故障码
+        r.servo_fault_code = p.data[idx++];
+        // [40] 电子透雾状态
         r.defog_status = p.data[idx++];
-        // [36] current_exposure
-        r.current_exposure = p.data[idx++];
-        // [37] detect_recog_threshold
-        r.detect_recog_threshold = p.data[idx++];
-        // [38] track_threshold
-        r.track_threshold = p.data[idx++];
-        // [39-40] memory_track_time
+        // [41] 雨刷状态
+        r.wiper_status = p.data[idx++];
+        // [42] 加热状态
+        r.heater_status = p.data[idx++];
+        // [43] 俯仰伺服故障码
+        r.el_servo_fault_code = p.data[idx++];
+        // [44-45] 记忆跟踪时间
         r.memory_track_time = (uint16_t)p.data[idx] | ((uint16_t)p.data[idx+1] << 8);
         idx += 2;
 

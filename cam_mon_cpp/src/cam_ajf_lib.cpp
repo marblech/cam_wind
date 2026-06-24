@@ -236,7 +236,7 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float az_speed, float el
 }
 
 bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_speed, float el_speed) {
-    // 构建舵机控制数据包
+    // 构建并发送舵机控制数据包（位置控制）
     std::vector<uint8_t> packet = build_servo_packet(
         azimuth, elevation, az_speed, el_speed, 
         /*target_distance=*/0,  // 默认不使用距离
@@ -246,32 +246,26 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_spe
         /*packet_type=*/SERVO_PACKET_TYPE_POINT
     );
     
-    // 发送命令
     sockaddr_in serv{};
     serv.sin_family = AF_INET;
     serv.sin_port = htons(config_.port);
     inet_pton(AF_INET, config_.host.c_str(), &serv.sin_addr);
     
     ssize_t sent = sendto(cmd_sock_, reinterpret_cast<const char*>(packet.data()), packet.size(), 0, reinterpret_cast<sockaddr*>(&serv), sizeof(serv));
-    
     if (sent < 0) {
         PLOG_ERROR << "[CamAJFLib] Failed to send servo command";
         return false;
     }
     
-    // 尝试接收响应
+    // 尝试接收舵机响应（短超时）
     uint8_t buf[4096];
     sockaddr_in peer{};
     socklen_t plen = sizeof(peer);
-    
-    // 使用较短的超时等待响应
     struct timeval rtv;
     rtv.tv_sec = 0;
     rtv.tv_usec = 500000;  // 500ms
     setsockopt(cmd_sock_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&rtv), sizeof(rtv));
-    
     ssize_t n = recvfrom(cmd_sock_, reinterpret_cast<char*>(buf), sizeof(buf), 0, reinterpret_cast<sockaddr*>(&peer), &plen);
-    
     // 恢复原始超时
     struct timeval orig_tv;
     orig_tv.tv_sec = config_.timeout_ms / 1000;
@@ -289,12 +283,21 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_spe
             PLOG_INFO << "[CamAJFLib] PTZ response: az=" << servo_resp->azimuth 
                       << " el=" << servo_resp->elevation;
             broadcast_ptz_update();
-            return true;
+        }
+    } else {
+        PLOG_INFO << "[CamAJFLib] PTZ command sent (no response): az=" << azimuth << " el=" << elevation;
+    }
+    
+    // 发送摄像机变焦/焦距命令 —— 将传入的 zoom 值作为焦距（mm）直达设置
+    // 用户提供的示例报文使用 function=0x06, ctrl=0x00, data[0..3]=float little-endian 表示 100.0
+    if (zoom >= 0.0f) {
+        // 调用 set_focus 以发送正确的“焦距直达”报文
+        if (!set_focus(zoom)) {
+            PLOG_ERROR << "[CamAJFLib] Failed to send focus command for zoom=" << zoom;
+            // 不因焦距命令失败而视为整体失败，仍返回 true（舵机命令已发送）
         }
     }
     
-    // 没有响应但命令已发送
-    PLOG_INFO << "[CamAJFLib] PTZ command sent (no response): az=" << azimuth << " el=" << elevation;
     return true;
 }
 
@@ -332,16 +335,18 @@ bool CamAJFLib::set_zoom(float zoom) {
 }
 
 bool CamAJFLib::set_focus(float focus) {
-    // 构建相机控制命令：功能码 0x01, 控制码 0x06 (焦距)
+    // 按协议发送“焦距直达”命令（示例报文使用 function=0x06, ctrl=0x00，data[0..3]=float LE）
     std::vector<uint8_t> payload(15, 0x00);
-    // 将焦距值转换为浮点数存储
-    uint32_t focus_bits = static_cast<uint32_t>(focus * 100);  // 精度 0.01
-    payload[0] = focus_bits & 0xFF;
-    payload[1] = (focus_bits >> 8) & 0xFF;
-    payload[2] = (focus_bits >> 16) & 0xFF;
-    payload[3] = (focus_bits >> 24) & 0xFF;
+    // 将浮点焦距按小端字节序写入 payload[0..3]
+    uint32_t bits = 0;
+    std::memcpy(&bits, &focus, sizeof(bits));
+    payload[0] = bits & 0xFF;
+    payload[1] = (bits >> 8) & 0xFF;
+    payload[2] = (bits >> 16) & 0xFF;
+    payload[3] = (bits >> 24) & 0xFF;
     
-    Packet pkt = make_camera_command(static_cast<uint8_t>(VisibleCameraFunction::VC_FUNC_CONTINUOUS_ZOOM), /*ctrl=*/CAM_CTRL_FOCAL, payload);
+    // 使用 function=0x06, ctrl=0x00 与示例报文一致（焦距直达）
+    Packet pkt = make_camera_command(0x06 /*function*/, 0x00 /*ctrl*/, payload);
     auto out = pkt.serialize();
     
     sockaddr_in serv{};

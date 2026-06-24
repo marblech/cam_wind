@@ -105,7 +105,8 @@ static std::string detect_multicast_interface() {
 }
 #endif
 
-bool MulticastReceiver::init(const char* bind_addr, const char* iface_addr) {
+bool MulticastReceiver::init(const char* bind_addr, const char* iface_addr,
+                             const char* multicast_addr, int multicast_port) {
 #ifdef _WIN32
     if (!g_winsock_initialized) ensure_winsock_init();
 #endif
@@ -149,15 +150,19 @@ bool MulticastReceiver::init(const char* bind_addr, const char* iface_addr) {
     setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO, 
                reinterpret_cast<const char*>(&tv), sizeof(tv));
 
+    // 保存组播配置
+    multicast_addr_ = multicast_addr ? multicast_addr : MULTICAST_GROUP_ADDR;
+    multicast_port_ = (multicast_port > 0) ? multicast_port : MULTICAST_GROUP_PORT;
+
     // 绑定套接字到组播端口
     sockaddr_in local{};
     local.sin_family = AF_INET;
-    local.sin_port = htons(MULTICAST_GROUP_PORT);
+    local.sin_port = htons(multicast_port_);
     local.sin_addr.s_addr = inet_addr(bind_addr);
 
     if (bind(sock_, reinterpret_cast<sockaddr*>(&local), sizeof(local)) == SOCKET_ERROR) {
         fprintf(stderr, "[MulticastReceiver] 绑定套接字到端口 %d 失败: %d\n", 
-                MULTICAST_GROUP_PORT, 
+                multicast_port_, 
 #ifdef _WIN32
                 WSAGetLastError()
 #else
@@ -171,13 +176,13 @@ bool MulticastReceiver::init(const char* bind_addr, const char* iface_addr) {
 
     // 加入组播组 - 使用检测到的接口地址
     ip_mreq mreq{};
-    mreq.imr_multiaddr.s_addr = inet_addr(MULTICAST_GROUP_ADDR);
+    mreq.imr_multiaddr.s_addr = inet_addr(multicast_addr_.c_str());
     mreq.imr_interface.s_addr = inet_addr(actual_iface_addr.c_str());
 
     if (setsockopt(sock_, IPPROTO_IP, IP_ADD_MEMBERSHIP,
                    reinterpret_cast<const char*>(&mreq), sizeof(mreq)) == SOCKET_ERROR) {
         fprintf(stderr, "[MulticastReceiver] 加入组播组 %s 失败: %d\n",
-                MULTICAST_GROUP_ADDR,
+                multicast_addr_.c_str(),
 #ifdef _WIN32
                 WSAGetLastError()
 #else
@@ -194,7 +199,7 @@ bool MulticastReceiver::init(const char* bind_addr, const char* iface_addr) {
     initialized_ = true;
 
     fprintf(stderr, "[MulticastReceiver] 初始化成功: 组播地址 %s, 端口 %d, 绑定地址 %s, 接口地址 %s\n",
-            MULTICAST_GROUP_ADDR, MULTICAST_GROUP_PORT, bind_addr, 
+            multicast_addr_.c_str(), multicast_port_, bind_addr, 
             iface_addr_.empty() ? "默认" : iface_addr_.c_str());
 
     return true;
@@ -232,7 +237,7 @@ void MulticastReceiver::stop() {
     if (initialized_ && sock_ != INVALID_SOCKET) {
         // 离开组播组
         ip_mreq mreq{};
-        mreq.imr_multiaddr.s_addr = inet_addr(MULTICAST_GROUP_ADDR);
+        mreq.imr_multiaddr.s_addr = inet_addr(multicast_addr_.c_str());
         mreq.imr_interface.s_addr = iface_addr_.empty() ? INADDR_ANY : inet_addr(iface_addr_.c_str());
 
         setsockopt(sock_, IPPROTO_IP, IP_DROP_MEMBERSHIP,
@@ -332,7 +337,7 @@ bool MulticastReceiver::parseReceivedPacket(const uint8_t* buf, int len,
                         "方位脱靶量=%.2f, 俯仰脱靶量=%.2f, "
                         "伺服方位角=%.2f, 伺服俯仰角=%.2f\n",
                         static_cast<unsigned>(report->addr), static_cast<unsigned>(report->frame_seq),
-                        report->ir_focal_length, report->vis_focal_length,
+                        report->vis_focal_length, report->ir_focal_length,
                         report->az_aberration, report->el_aberration,
                         report->servo_azimuth, report->servo_elevation);
 

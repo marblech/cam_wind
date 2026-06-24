@@ -2,8 +2,14 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <csignal>
 
 #include "cam_controller.h"
+
+static volatile sig_atomic_t g_stop = 0;
+static void sigint_handler(int /*sig*/) {
+    g_stop = 1;
+}
 
 // Simple example demonstrating starting CamController in P2P or multicast mode.
 // Usage:
@@ -23,6 +29,9 @@ int main(int argc, char** argv) {
         std::cerr << "Failed to create CamController\n";
         return 1;
     }
+
+    std::signal(SIGINT, sigint_handler);
+    std::signal(SIGTERM, sigint_handler);
 
     int r = 0;
 
@@ -58,8 +67,9 @@ int main(int argc, char** argv) {
         std::cerr << "\n";
     }
 
-    // run for a short period, printing last packet length and PTZ every second
-    for (int i = 0; i < 10; ++i) {
+    // run until user requests exit (Ctrl+C). Print last packet length and PTZ every second
+    int i = 0;
+    while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         uint8_t buf[2048];
         int n = cam_controller_get_last(c, buf, sizeof(buf));
@@ -68,7 +78,9 @@ int main(int argc, char** argv) {
         if (cam_controller_get_ptz(c, &az, &el, &ir, &vis)) {
             std::cerr << " PTZ az=" << az << " el=" << el << " ir=" << ir << " vis=" << vis << "\n";
         }
+        ++i;
     }
+    std::cerr << "Received stop signal, shutting down...\n";
 
     cam_controller_stop(c);
     cam_controller_destroy(c);

@@ -146,3 +146,16 @@ endif()
 set_target_properties(cam_controller_example PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
 )
+
+# ============================================================================
+# PTZ control test
+# ============================================================================
+add_executable(test_ptz_control src/test_ptz_control.cpp)
+if(WIN32)
+    target_link_libraries(test_ptz_control PRIVATE cammon ws2_32)
+else()
+    target_link_libraries(test_ptz_control PRIVATE cammon pthread)
+endif()
+set_target_properties(test_ptz_control PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
+)
