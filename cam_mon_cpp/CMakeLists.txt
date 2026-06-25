@@ -4,11 +4,23 @@ project(cammon VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(Boost_DIR /home/marblech/boost_182/lib/cmake/Boost-1.82.0)
+if(NOT DEFINED Boost_DIR)
+    if(WIN32)
+        set(Boost_DIR "J:/boost_1_82_0/stage/lib/cmake/Boost-1.82.0" CACHE PATH "Boost CMake config dir (Windows)")
+    else()
+        set(Boost_DIR "/usr/local/boost_1_82_0/lib/cmake/Boost-1.82.0" CACHE PATH "Boost CMake config dir (Linux)")
+    endif()
+endif()
 
-set(Boost_USE_STATIC_LIBS OFF)    # 若 b2 构建的是共享库；静态则改为 ON
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_DEBUG_RUNTIME OFF)
+if(NOT DEFINED Boost_USE_STATIC_LIBS)
+    set(Boost_USE_STATIC_LIBS OFF)    # 若 b2 构建的是共享库；静态则改为 ON
+endif()
+if(NOT DEFINED Boost_USE_MULTITHREADED)
+    set(Boost_USE_MULTITHREADED ON)
+endif()
+if(NOT DEFINED Boost_USE_DEBUG_RUNTIME)
+    set(Boost_USE_DEBUG_RUNTIME OFF)
+endif()
 find_package(Boost REQUIRED COMPONENTS system filesystem date_time)
 
 # Output directory setup

@@ -70,7 +70,7 @@ static void cleanup_winsock() {
 // 底层 UDP 通信
 // ============================================================================
 
-int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, int outlen, uint8_t* inbuf, int inbuf_len, int timeout_ms) {
+CAMMON_API int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, int outlen, uint8_t* inbuf, int inbuf_len, int timeout_ms) {
 #ifdef _WIN32
     if (!g_winsock_initialized) ensure_winsock_init();
     SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -131,7 +131,7 @@ int cammon_send_udp_and_recv(const char* host, int port, const uint8_t* outbuf, 
 // 高层设备控制接口
 // ============================================================================
 
-int cammon_send_camera_command(const char* host, int port, uint8_t func, uint8_t ctrl, const uint8_t* payload, int payload_len, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
+CAMMON_API int cammon_send_camera_command(const char* host, int port, uint8_t func, uint8_t ctrl, const uint8_t* payload, int payload_len, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
     // Build camera command (ADDR_CAMERA_VIS assumed inside make_camera_command)
     std::vector<uint8_t> data;
     if (payload && payload_len > 0) data.assign(payload, payload + payload_len);
@@ -145,7 +145,7 @@ int cammon_send_camera_command(const char* host, int port, uint8_t func, uint8_t
     return result;
 }
 
-int cammon_send_packet(const char* host, int port, uint8_t addr, uint8_t func, uint8_t ctrl, const uint8_t* payload, int payload_len, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
+CAMMON_API int cammon_send_packet(const char* host, int port, uint8_t addr, uint8_t func, uint8_t ctrl, const uint8_t* payload, int payload_len, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
     cammon::Packet p;
     p.addr = addr;
     p.func = func;
@@ -155,7 +155,7 @@ int cammon_send_packet(const char* host, int port, uint8_t addr, uint8_t func, u
     return cammon_send_udp_and_recv(host, port, out.data(), (int)out.size(), resp_buf, resp_buf_len, timeout_ms);
 }
 
-int cammon_send_servo_command(const char* host, int port, float az, float el, float azs, float els, uint16_t target_distance, uint8_t seq, uint8_t control, uint8_t device_type, uint8_t packet_type, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
+CAMMON_API int cammon_send_servo_command(const char* host, int port, float az, float el, float azs, float els, uint16_t target_distance, uint8_t seq, uint8_t control, uint8_t device_type, uint8_t packet_type, uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
     auto out = cammon::build_servo_packet(az, el, azs, els, target_distance, seq, control, device_type, packet_type);
     PLOG_DEBUG << "[C++ DEBUG] Sending servo packet: size=" << (int)out.size();
     {

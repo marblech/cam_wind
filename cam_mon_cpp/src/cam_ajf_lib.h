@@ -37,6 +37,8 @@
 #include <functional>
 #include <vector>
 
+#include "cammon_api.h"
+
 namespace cammon {
 /// PTZ 状态数据结构
 struct PTZStatus {
@@ -72,7 +74,7 @@ using PTZCallback = std::function<void(float azimuth, float elevation, float zoo
  * 封装了与摄像头/舵机控制器的 UDP 通信，提供 PTZ 控制功能。
  * 内部使用独立线程监听状态报告，并通过回调通知调用者。
  */
-class CamAJFLib {
+class CAMMON_API CamAJFLib {
 public:
     /**
      * @brief 构造函数

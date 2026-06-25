@@ -12,37 +12,40 @@
 #include <iostream>
 #include <string>
 #include <cstring>
-#include <cstring>
+#include <thread>
+#include <chrono>
+#include <cmath>
+#include <algorithm>
 #include "cam_ajf_lib.h"
 
 /**
  * @brief 打印使用说明
  */
 static void print_usage(const char* prog_name) {
-    std::cout << "PTZ Control Test - 摄像机位置与变焦控制" << std::endl;
+    std::cout << "PTZ Control Test - Camera position and zoom control" << std::endl;
     std::cout << "=========================================" << std::endl;
-    std::cout << "用法: " << prog_name << " [选项]" << std::endl;
+    std::cout << "Usage: " << prog_name << " [options]" << std::endl;
     std::cout << std::endl;
-    std::cout << "选项:" << std::endl;
-    std::cout << "  -H <host>        目标设备 IP 地址 (默认: 193.0.1.94)" << std::endl;
-    std::cout << "  -p <port>        控制端口号 (默认: 8080)" << std::endl;
-    std::cout << "  -P <azimuth>     方位角 Pan (度, 默认: 0.0)" << std::endl;
-    std::cout << "  -T <elevation>   俯仰角 Tilt (度, 默认: 0.0)" << std::endl;
-    std::cout << "  -Z <zoom>        变焦 Zoom (范围: 0-100, 默认: 0)" << std::endl;
-    std::cout << "  -AS <az_speed>   方位角移动速度 度/秒, 默认: 1.5)" << std::endl;
-    std::cout << "  -ES <el_speed>   俯仰角移动速度 度/秒, 默认: 0.5)" << std::endl;
-    std::cout << "  -i               交互模式：循环输入 PTZ 值" << std::endl;
-    std::cout << "  -s               只显示当前 PTZ 状态（不发送控制命令）" << std::endl;
-    std::cout << "  -v               详细输出模式" << std::endl;
-    std::cout << "  -h, --help       显示此帮助信息" << std::endl;
+    std::cout << "Options:" << std::endl;
+    std::cout << "  -H <host>        Target device IP (default: 193.0.1.94)" << std::endl;
+    std::cout << "  -p <port>        Control port (default: 8080)" << std::endl;
+    std::cout << "  -P <azimuth>     Pan angle (deg, default: 0.0)" << std::endl;
+    std::cout << "  -T <elevation>   Tilt angle (deg, default: 0.0)" << std::endl;
+    std::cout << "  -Z <zoom>        Zoom (0-100, default: 0)" << std::endl;
+    std::cout << "  -AS <az_speed>   Pan speed (deg/s, default: 1.5)" << std::endl;
+    std::cout << "  -ES <el_speed>   Tilt speed (deg/s, default: 0.5)" << std::endl;
+    std::cout << "  -i               Interactive mode: loop input PTZ values" << std::endl;
+    std::cout << "  -s               Status only (do not send control commands)" << std::endl;
+    std::cout << "  -v               Verbose output" << std::endl;
+    std::cout << "  -h, --help       Show this help" << std::endl;
     std::cout << std::endl;
-    std::cout << "示例:" << std::endl;
+    std::cout << "Examples:" << std::endl;
     std::cout << "  " << prog_name << " -P 45.0 -T 30.0 -Z 50" << std::endl;
-    std::cout << "      将摄像机转到方位角45度、俯仰角30度、变焦50的位置" << std::endl;
+    std::cout << "      Move camera to Pan=45, Tilt=30, Zoom=50" << std::endl;
     std::cout << "  " << prog_name << " -i" << std::endl;
-    std::cout << "      进入交互模式，可连续输入 PTZ 值" << std::endl;
+    std::cout << "      Enter interactive mode to input PTZ values repeatedly" << std::endl;
     std::cout << "  " << prog_name << " -s" << std::endl;
-    std::cout << "      只显示当前 PTZ 状态" << std::endl;
+    std::cout << "      Show current PTZ status only" << std::endl;
 }
 
 /**
@@ -50,8 +53,8 @@ static void print_usage(const char* prog_name) {
  */
 static bool interactive_input(float& az, float& el, float& zoom) {
     std::cout << std::endl;
-    std::cout << "请输入 PTZ 值（输入 'q' 退出，'r' 重置为默认值）:" << std::endl;
-    std::cout << "  P (方位角, 度): ";
+    std::cout << "Enter PTZ values (enter 'q' to quit, 'r' to reset to defaults):" << std::endl;
+    std::cout << "  P (Pan, deg): ";
     
     std::string input;
     if (!(std::cin >> input)) {
@@ -71,7 +74,7 @@ static bool interactive_input(float& az, float& el, float& zoom) {
     try {
         az = std::stof(input);
     } catch (...) {
-        std::cerr << "无效的方位角值!" << std::endl;
+        std::cerr << "Invalid pan value!" << std::endl;
         return false;
     }
     
@@ -82,7 +85,7 @@ static bool interactive_input(float& az, float& el, float& zoom) {
     try {
         el = std::stof(input);
     } catch (...) {
-        std::cerr << "无效的俯仰角值!" << std::endl;
+        std::cerr << "Invalid tilt value!" << std::endl;
         return false;
     }
     
@@ -95,7 +98,7 @@ static bool interactive_input(float& az, float& el, float& zoom) {
         if (zoom < 0.0f) zoom = 0.0f;
         if (zoom > 100.0f) zoom = 100.0f;
     } catch (...) {
-        std::cerr << "无效的变焦值!" << std::endl;
+        std::cerr << "Invalid zoom value!" << std::endl;
         return false;
     }
     
@@ -125,53 +128,53 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 host = argv[++i];
             } else {
-                std::cerr << "错误: -H 需要后跟 IP 地址" << std::endl;
+                std::cerr << "Error: -H requires an IP address" << std::endl;
                 return 1;
             }
         } else if (arg == "-p") {
             if (i + 1 < argc) {
                 port = std::atoi(argv[++i]);
                 if (port <= 0) {
-                    std::cerr << "错误: 无效的端口号" << std::endl;
+                    std::cerr << "Error: invalid port number" << std::endl;
                     return 1;
                 }
             } else {
-                std::cerr << "错误: -p 需要后跟端口号" << std::endl;
+                std::cerr << "Error: -p requires a port number" << std::endl;
                 return 1;
             }
         } else if (arg == "-P") {
             if (i + 1 < argc) {
                 azimuth = std::atof(argv[++i]);
             } else {
-                std::cerr << "错误: -P 需要后跟方位角值" << std::endl;
+                std::cerr << "Error: -P requires a pan (azimuth) value" << std::endl;
                 return 1;
             }
         } else if (arg == "-T") {
             if (i + 1 < argc) {
                 elevation = std::atof(argv[++i]);
             } else {
-                std::cerr << "错误: -T 需要后跟俯仰角值" << std::endl;
+                std::cerr << "Error: -T requires a tilt (elevation) value" << std::endl;
                 return 1;
             }
         } else if (arg == "-Z") {
             if (i + 1 < argc) {
                 zoom = std::atof(argv[++i]);
             } else {
-                std::cerr << "错误: -Z 需要后跟变焦值" << std::endl;
+                std::cerr << "Error: -Z requires a zoom value" << std::endl;
                 return 1;
             }
         } else if (arg == "-AS") {
             if (i + 1 < argc) {
                 az_speed = std::atof(argv[++i]);
             } else {
-                std::cerr << "错误: -AS 需要后跟方位角速度" << std::endl;
+                std::cerr << "Error: -AS requires pan speed value" << std::endl;
                 return 1;
             }
         } else if (arg == "-ES") {
             if (i + 1 < argc) {
                 el_speed = std::atof(argv[++i]);
             } else {
-                std::cerr << "错误: -ES 需要后跟俯仰角速度" << std::endl;
+                std::cerr << "Error: -ES requires tilt speed value" << std::endl;
                 return 1;
             }
         } else if (arg == "-i") {
@@ -196,41 +199,41 @@ int main(int argc, char* argv[]) {
     }
     
     if (!cam.initWithConfig(config)) {
-        std::cerr << "错误: 初始化摄像头控制库失败" << std::endl;
+        std::cerr << "Error: failed to initialize camera control library" << std::endl;
         return 1;
     }
     
     // 启动监听线程
     if (!cam.start()) {
-        std::cerr << "错误: 启动状态监听线程失败" << std::endl;
+        std::cerr << "Error: failed to start status listener thread" << std::endl;
         cam.shutdown();
         return 1;
     }
     
     if (verbose) {
-        std::cout << "[详细] 状态监听线程已启动" << std::endl;
+        std::cout << "[Verbose] status listener started" << std::endl;
     }
     
     // 设置 PTZ 状态回调
     cam.on_ptz_update([](float az, float el, float z, float f, bool valid) {
         if (valid) {
-            std::cout << "[状态更新] Azimuth=" << az << "°, Elevation=" << el 
-                      << "°, Zoom=" << z << ", Focus=" << f << "mm" << std::endl;
+            std::cout << "[Status] Azimuth=" << az << " deg, Elevation=" << el
+                      << " deg, Zoom=" << z << ", Focus=" << f << " mm" << std::endl;
         }
     });
     
     if (status_only) {
-        // 只显示当前 PTZ 状态
-        std::cout << "获取当前 PTZ 状态..." << std::endl;
+        // Show current PTZ status only
+        std::cout << "Getting current PTZ status..." << std::endl;
         cammon::PTZStatus ptz = cam.get_ptz();
         if (ptz.valid) {
-            std::cout << "当前 PTZ 状态:" << std::endl;
-            std::cout << "  方位角 (Pan):  " << ptz.azimuth << "°" << std::endl;
-            std::cout << "  俯仰角 (Tilt): " << ptz.elevation << "°" << std::endl;
-            std::cout << "  变焦 (Zoom):   " << ptz.zoom << std::endl;
-            std::cout << "  焦距 (Focus):  " << ptz.focus << "mm" << std::endl;
+            std::cout << "Current PTZ status:" << std::endl;
+            std::cout << "  Pan:  " << ptz.azimuth << " deg" << std::endl;
+            std::cout << "  Tilt: " << ptz.elevation << " deg" << std::endl;
+            std::cout << "  Zoom: " << ptz.zoom << std::endl;
+            std::cout << "  Focus:" << ptz.focus << " mm" << std::endl;
         } else {
-            std::cout << "未获取到有效的 PTZ 状态数据" << std::endl;
+            std::cout << "No valid PTZ status available" << std::endl;
         }
         
         cam.stop();
@@ -242,9 +245,9 @@ int main(int argc, char* argv[]) {
     int command_count = 0;
     do {
         if (interactive) {
-            // 交互模式：用户输入 PTZ 值
+            // Interactive mode: user input PTZ values
             if (!interactive_input(azimuth, elevation, zoom)) {
-                std::cout << "用户退出交互模式" << std::endl;
+                std::cout << "User exited interactive mode" << std::endl;
                 break;
             }
         }
@@ -252,35 +255,35 @@ int main(int argc, char* argv[]) {
         if (verbose) {
             std::cout << std::endl;
             std::cout << "========================================" << std::endl;
-            std::cout << "发送 PTZ 控制命令 #" << (command_count + 1) << std::endl;
-            std::cout << "  P (Pan/方位角):    " << azimuth << "°" << std::endl;
-            std::cout << "  T (Tilt/俯仰角):   " << elevation << "°" << std::endl;
-            std::cout << "  Z (Zoom/变焦):     " << zoom << std::endl;
-            std::cout << "  方位角速度:        " << az_speed << "°/s" << std::endl;
-            std::cout << "  俯仰角速度:        " << el_speed << "°/s" << std::endl;
+            std::cout << "Sending PTZ command #" << (command_count + 1) << std::endl;
+            std::cout << "  Pan:    " << azimuth << " deg" << std::endl;
+            std::cout << "  Tilt:   " << elevation << " deg" << std::endl;
+            std::cout << "  Zoom:   " << zoom << std::endl;
+            std::cout << "  Pan speed:  " << az_speed << " deg/s" << std::endl;
+            std::cout << "  Tilt speed: " << el_speed << " deg/s" << std::endl;
             std::cout << "========================================" << std::endl;
         } else {
-            std::cout << "设置 PTZ: P=" << azimuth << "°, T=" << elevation 
-                      << "°, Z=" << zoom << std::endl;
+            std::cout << "Set PTZ: P=" << azimuth << " deg, T=" << elevation
+                      << " deg, Z=" << zoom << std::endl;
         }
         
         // 发送 PTZ 控制命令
         bool success = cam.set_ptz(azimuth, elevation, zoom, az_speed, el_speed);
         
         if (success) {
-            std::cout << "✓ PTZ 控制命令发送成功" << std::endl;
+            std::cout << "PTZ command sent successfully" << std::endl;
             command_count++;
             
             if (!interactive) {
                 // 非交互模式：等待一段时间让摄像机移动
-                std::cout << "等待摄像机移动..." << std::endl;
+                std::cout << "Waiting for camera movement..." << std::endl;
                 // 根据距离估算移动时间，至少等待1秒
                 int wait_time = static_cast<int>(std::max(
                     std::abs(azimuth) / az_speed,
                     std::abs(elevation) / el_speed
                 )) + 1;
                 if (wait_time < 1) wait_time = 1;
-                std::cout << "预计移动时间: " << wait_time << " 秒" << std::endl;
+                std::cout << "Estimated move time: " << wait_time << " seconds" << std::endl;
                 
                 // 简单休眠等待
                 for (int i = 0; i < wait_time * 10; i++) {
@@ -290,20 +293,20 @@ int main(int argc, char* argv[]) {
                 }
                 std::cout << std::endl;
                 
-                // 获取移动后的 PTZ 状态
-                std::cout << "获取移动后 PTZ 状态:" << std::endl;
+                // Get PTZ status after movement
+                std::cout << "PTZ status after move:" << std::endl;
                 cammon::PTZStatus ptz = cam.get_ptz();
                 if (ptz.valid) {
-                    std::cout << "  方位角 (Pan):  " << ptz.azimuth << "°" << std::endl;
-                    std::cout << "  俯仰角 (Tilt): " << ptz.elevation << "°" << std::endl;
-                    std::cout << "  变焦 (Zoom):   " << ptz.zoom << std::endl;
-                    std::cout << "  焦距 (Focus):  " << ptz.focus << "mm" << std::endl;
+                    std::cout << "  Pan:  " << ptz.azimuth << " deg" << std::endl;
+                    std::cout << "  Tilt: " << ptz.elevation << " deg" << std::endl;
+                    std::cout << "  Zoom: " << ptz.zoom << std::endl;
+                    std::cout << "  Focus:" << ptz.focus << " mm" << std::endl;
                 } else {
-                    std::cout << "  未获取到有效的 PTZ 状态数据" << std::endl;
+                    std::cout << "  No valid PTZ status available" << std::endl;
                 }
             }
         } else {
-            std::cerr << "✗ PTZ 控制命令发送失败" << std::endl;
+            std::cerr << "PTZ command send failed" << std::endl;
         }
         
         // 非交互模式下循环结束后退出
@@ -319,7 +322,7 @@ int main(int argc, char* argv[]) {
     cam.shutdown();
     
     std::cout << std::endl;
-    std::cout << "PTZ 控制测试完成，共发送 " << command_count << " 条命令" << std::endl;
+    std::cout << "PTZ test finished, sent " << command_count << " commands" << std::endl;
     
     return 0;
 }
