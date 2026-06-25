@@ -22,28 +22,21 @@
   <build>
     <resources>
       <resource>
-        <!-- Include native libraries copied to project native/ into the JAR under /native (if present) -->
-        <directory>${project.basedir}/native</directory>
+        <!-- Project-local native resources to be packaged inside the JAR under /native -->
+        <directory>${project.basedir}/src/main/resources/native</directory>
         <includes>
-          <include>cammon.dll</include>
-          <include>libcammon.so</include>
+          <include>**/*</include>
         </includes>
         <targetPath>native</targetPath>
         <filtering>false</filtering>
       </resource>
       <resource>
-        <!-- Also pick native libs directly from the C++ build output so no extra copy step is required -->
-        <directory>${project.basedir}/../cam_mon_cpp/build/Debug</directory>
-        <includes>
-          <include>cammon.dll</include>
-        </includes>
-        <targetPath>native</targetPath>
-        <filtering>false</filtering>
-      </resource>
-      <resource>
+        <!-- Optionally include built native libs from the C++ build output when present -->
         <directory>${project.basedir}/../cam_mon_cpp/build</directory>
         <includes>
-          <include>libcammon.so</include>
+          <include>cammon*.dll</include>
+          <include>boost_*.dll</include>
+          <include>libcammon*.so</include>
         </includes>
         <targetPath>native</targetPath>
         <filtering>false</filtering>
@@ -100,6 +93,34 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-resources-plugin</artifactId>
         <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>copy-native-to-release</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/release/native</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}/src/main/resources/native</directory>
+                  <includes>
+                    <include>**/*</include>
+                  </includes>
+                </resource>
+                <resource>
+                  <directory>${project.basedir}/../cam_mon_cpp/build</directory>
+                  <includes>
+                    <include>cammon*.dll</include>
+                    <include>boost_*.dll</include>
+                    <include>*.so</include>
+                  </includes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
