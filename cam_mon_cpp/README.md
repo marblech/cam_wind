@@ -192,4 +192,40 @@ public final class PTZStatus {
 ---
 
 如果需要，我可以继续把 `README` 中的示例代码提取到 `examples/` 目录，或把 Java 的测试启动脚本加入 Makefile / maven profile 以便一键运行集成测试。
+
+## Windows: 使用 JDK 1.8 (jni) + Visual Studio (vc142, amd64) 构建
+
+本项目的 JNI 头文件由 `JAVA_HOME` 指定，Windows 上推荐按下列步骤使用 JDK8（示例路径 `C:\Program Files\Java\jdk1.8.0_152`）和 Visual Studio v142 构建：
+
+1. 打开 **Developer Command Prompt**，或从命令行调用 VS 开发者环境：
+
+```bat
+call "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat" -arch=amd64
+```
+
+2. 在同一会话中设置 `JAVA_HOME`（只在当前终端会话生效）：
+
+```bat
+set "JAVA_HOME=C:\Program Files\Java\jdk1.8.0_152"
+set PATH=%JAVA_HOME%\bin;%PATH%
+```
+
+3. 在仓库根目录运行（将使用 `NMake Makefiles` 生成器，VS 环境会选择已激活的 toolset）：
+
+```bat
+cd cam_mon_cpp
+if not exist build\jni8 mkdir build\jni8
+cd build\jni8
+cmake ../.. -G "NMake Makefiles"
+nmake
+```
+
+4. 构建产物将位于 `cam_mon_cpp/build` 下（Windows 为 `cammon.dll` 以及示例可执行文件）。
+
+我已在仓库根目录添加了自动化脚本 `build_compile_vc142_jni8.bat`，可直接在已初始化的 VS 开发者命令提示符下运行：
+
+- 脚本路径: [build_compile_vc142_jni8.bat](build_compile_vc142_jni8.bat)
+- README 文件: [cam_mon_cpp/README.md](cam_mon_cpp/README.md)
+
+如需我把该脚本改为自动检测已安装的 Visual Studio 版本并选择合适的 toolset（或改为使用 MSBuild/Visual Studio generator），我可以继续修改。
 ````
