@@ -338,4 +338,4 @@ make -j$(nproc)
 - 测试命令示例：
 ```bash
 cd cam_mon_cpp/build
-./test_ptz_control -H 193.0.1.94 -p 8080 -P 0 -T 0 -Z 100 -v
+./test_ptz_control -H 192.168.0.15 -p 1234 -P 0 -T 0 -Z 100 -v
