@@ -16,6 +16,12 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>
   <dependencies>
+    <!-- JNA dependency for native library access without JNI -->
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>5.13.0</version>
+    </dependency>
     <!-- Test dependencies removed for offline production build. Tests have been
          converted into runnable helper classes under src/main/java when needed. -->
   </dependencies>
@@ -125,7 +131,7 @@
     </plugins>
   </build>
 
-  <!-- Platform-specific profile: Windows uses build/Debug and ';' path separator -->
+  <!-- Platform-specific profile: Windows uses build/jna and ';' path separator -->
   <profiles>
     <profile>
       <id>windows</id>
@@ -135,7 +141,7 @@
         </os>
       </activation>
       <properties>
-        <native.dir>${project.basedir}/../cam_mon_cpp/build/Debug</native.dir>
+        <native.dir>${project.basedir}/../cam_mon_cpp/build/jna</native.dir>
         <path.separator>;</path.separator>
       </properties>
     </profile>

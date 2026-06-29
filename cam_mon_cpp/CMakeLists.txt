@@ -27,10 +27,10 @@ find_package(Boost REQUIRED COMPONENTS system filesystem date_time)
 set(LIB_OUTPUT_DIR ${CMAKE_SOURCE_DIR}/build)
 
 # Sources - use actual files
+# JNA does not require JNI bridge code (cammon_jni.cpp)
 set(CAMMON_SOURCES
     src/cammon_api.cpp
     src/protocol.cpp
-    src/cammon_jni.cpp
     src/cam_controller.cpp
     src/cam_ajf_lib.cpp
     src/multicast_receiver.cpp
@@ -81,12 +81,8 @@ if(WIN32)
         WIN32_LEAN_AND_MEAN
         CAMMON_EXPORTS
     )
-    # Link Winsock and JNI
+    # Link Winsock
     target_link_libraries(cammon ws2_32)
-    target_include_directories(cammon PRIVATE
-        $ENV{JAVA_HOME}/include
-        $ENV{JAVA_HOME}/include/win32
-    )
     # Set output name and suffix
     set_target_properties(cammon PROPERTIES
         OUTPUT_NAME cammon
@@ -98,10 +94,6 @@ if(WIN32)
 else()
     # Linux
     target_link_libraries(cammon pthread Boost::system Boost::filesystem Boost::date_time)
-    target_include_directories(cammon PRIVATE
-        $ENV{JAVA_HOME}/include
-        $ENV{JAVA_HOME}/include/linux
-    )
     set_target_properties(cammon PROPERTIES
         OUTPUT_NAME cammon
         SUFFIX .so
