@@ -1,6 +1,7 @@
 ﻿#include "cam_controller.h"
 #include "protocol.h"
 #include "cammon_api.h"
+#include "plog_init.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -30,6 +31,7 @@ using ssize_t = int;
 #include <string>
 #include <thread>
 #include <vector>
+#include <unordered_map>
 
 // Boost.PropertyTree for config file reading (INI)
 #include <boost/property_tree/ptree.hpp>
@@ -44,6 +46,7 @@ struct CamController {
     std::atomic<bool> running{false};
     std::mutex mtx;
     std::vector<uint8_t> last_packet;
+    std::unordered_map<std::string, std::vector<uint8_t>> packets_by_ip;
     int listen_port{0};
     int sock{-1};
     bool is_multicast{false};
@@ -204,6 +207,10 @@ static void listener_loop(CamController* c) {
         {
             std::lock_guard<std::mutex> lk(c->mtx);
             c->last_packet = buf;
+            
+            char ip_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(src.sin_addr), ip_str, INET_ADDRSTRLEN);
+            c->packets_by_ip[std::string(ip_str)] = buf;
         }
         // parse/log
         parse_and_log_status(buf);
@@ -221,7 +228,17 @@ static void listener_loop(CamController* c) {
 extern "C" {
 
 CAMMON_API CamController* cam_controller_create() {
-    return new CamController();
+    // 首次创建控制器时初始化日志系统
+    static bool log_initialized = false;
+    if (!log_initialized) {
+        initPlog();
+        log_initialized = true;
+        PLOG_INFO << "[CamController] Logger initialized";
+    }
+    
+    CamController* controller = new CamController();
+    PLOG_INFO << "[CamController] Created new controller instance";
+    return controller;
 }
 
 CAMMON_API int cam_controller_start_with_config(CamController* h, const char* config_file, const char* mcast_group) {
@@ -308,11 +325,20 @@ CAMMON_API int cam_controller_get_last(CamController* h, uint8_t* buf, int bufle
     return copy_len;
 }
 
-CAMMON_API int cam_controller_get_ptz(CamController* h, float* out_az, float* out_el, float* out_ir_focus, float* out_vis_focus) {
+CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* out_az, float* out_el, float* out_ir_focus, float* out_vis_focus) {
     if (!h) return 0;
     std::lock_guard<std::mutex> lk(h->mtx);
-    if (h->last_packet.empty()) return 0;
-    const std::vector<uint8_t>& buf = h->last_packet;
+    const std::vector<uint8_t>* buf_ptr = nullptr;
+    if (ip != nullptr && *ip != '\0') {
+        auto it = h->packets_by_ip.find(ip);
+        if (it == h->packets_by_ip.end()) return 0;
+        buf_ptr = &it->second;
+    } else {
+        if (h->last_packet.empty()) return 0;
+        buf_ptr = &h->last_packet;
+    }
+    
+    const std::vector<uint8_t>& buf = *buf_ptr;
     // Expect positions per protocol: ir_focus bytes 6-9, vis_focus 10-13, servo_az 26-29, servo_el 30-33
     bool ok = true;
     float ir = 0.0f, vis = 0.0f, az = 0.0f, el = 0.0f;
@@ -329,6 +355,7 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, float* out_az, float* ou
     if (out_el) *out_el = el;
     if (out_ir_focus) *out_ir_focus = ir;
     if (out_vis_focus) *out_vis_focus = vis;
+    PLOG_INFO << "Get PTZ P:" << az << " T:" << el << " z:" << ir;
     return 1;
 }
 

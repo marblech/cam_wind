@@ -88,16 +88,17 @@ CAMMON_API void cam_controller_stop(CamController* h);
 CAMMON_API int cam_controller_get_last(CamController* h, uint8_t* buf, int buflen);
 
 /**
- * @brief 从最后一条状态包中获取解析后的 PTZ 值
+ * @brief 从指定 IP 地址的最后一条状态包中获取解析后的 PTZ 值
  *
  * @param h [in] 控制器句柄
+ * @param ip [in] 来源 IP 地址
  * @param out_az [out] 方位角
  * @param out_el [out] 俯仰角
  * @param out_ir_focus [out] 红外焦距
  * @param out_vis_focus [out] 可见光焦距
  * @return int 若有有效值返回 1，否则返回 0
  */
-CAMMON_API int cam_controller_get_ptz(CamController* h, float* out_az, float* out_el, float* out_ir_focus, float* out_vis_focus);
+CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* out_az, float* out_el, float* out_ir_focus, float* out_vis_focus);
 
 /**
  * @brief 发送 PTZ（舵机）命令

@@ -1,9 +1,9 @@
 package com.marble.cammon;
 
-// Client only uses JNI interfaces from CamMonNative; UDP fallback removed
+// Client only uses JNA interfaces from CamMonNative; UDP fallback removed
 
 /**
- * 客户端主程序 - 通过 JNI 调用 C++ 原生库进行摄像头监控通信。
+ * 客户端主程序 - 通过 JNA（Java Native Access）调用 C++ 原生库进行摄像头监控通信。
  * 
  * 此类演示了如何使用 CamMonNative 类发送相机控制和舵机控制命令。
  * 支持两种通信模式：
@@ -55,10 +55,10 @@ public class Client {
             System.out.println("PTZ helper unavailable in this build; skipping.");
             return;
         } else if (!useServo) {
-            System.err.println("Camera control via JNI is not available in this build. Use 'servo' mode to call CamMonNative.setPTZ.");
+            System.err.println("Camera control via JNA is not available in this build. Use 'servo' mode to call CamMonNative.setPTZ.");
             return;
         } else {
-            // Use native setPTZ (declared in CamMonNative)
+            // Use JNA-based setPTZ (declared in CamMonNative)
             System.out.println("Sending servo command via CamMonNative.setPTZ...");
             int rc = CamMonNative.setPTZ(host, port, 123.45f, 10.0f, 1.5f, 0.5f, 100, 1, 1, Protocol.SERVO_DEVICE_TYPE, Protocol.SERVO_PACKET_TYPE_POINT, 2000);
             if (rc <= 0) { System.err.println("setPTZ failed or timed out, rc=" + rc); return; }
@@ -70,5 +70,5 @@ public class Client {
         }
     }
 
-    // UDP fallback removed. Client now only uses JNI methods declared in CamMonNative.
+    // UDP fallback removed. Client now only uses JNA methods declared in CamMonNative.
 }

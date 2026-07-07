@@ -1,0 +1,58 @@
+Microsoft (R) COFF/PE Dumper Version 14.51.36246.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file build\cammon.dll
+
+File Type: DLL
+
+  Section contains the following exports for cammon.dll
+
+    00000000 characteristics
+    FFFFFFFF time date stamp
+        0.00 version
+           1 ordinal base
+          27 number of functions
+          27 number of names
+
+    ordinal hint RVA      name
+
+          1    0 000017A8 ??0MulticastReceiver@cammon@@QEAA@XZ = @ILT+1955(??0MulticastReceiver@cammon@@QEAA@XZ)
+          2    1 00001037 ??1MulticastReceiver@cammon@@QEAA@XZ = @ILT+50(??1MulticastReceiver@cammon@@QEAA@XZ)
+          3    2 00001B4F ?getPacketCount@MulticastReceiver@cammon@@QEBAHXZ = @ILT+2890(?getPacketCount@MulticastReceiver@cammon@@QEBAHXZ)
+          4    3 000020E0 ?init@MulticastReceiver@cammon@@QEAA_NPEBD0@Z = @ILT+4315(?init@MulticastReceiver@cammon@@QEAA_NPEBD0@Z)
+          5    4 00001EF1 ?isRunning@MulticastReceiver@cammon@@QEBA_NXZ = @ILT+3820(?isRunning@MulticastReceiver@cammon@@QEBA_NXZ)
+          6    5 00002581 ?parseReceivedPacket@MulticastReceiver@cammon@@AEAA_NPEBEHPEBDH@Z = @ILT+5500(?parseReceivedPacket@MulticastReceiver@cammon@@AEAA_NPEBEHPEBDH@Z)
+          7    6 00001F19 ?receiverThreadFunc@MulticastReceiver@cammon@@AEAAXXZ = @ILT+3860(?receiverThreadFunc@MulticastReceiver@cammon@@AEAAXXZ)
+          8    7 000014C9 ?setOnLoadStatusReportHandler@MulticastReceiver@cammon@@QEAAXV?$function@$$A6AXAEBULoadStatusReport@cammon@@@Z@std@@@Z = @ILT+1220(?setOnLoadStatusReportHandler@MulticastReceiver@cammon@@QEAAXV?$function@$$A6AXAEBULoadStatusReport@cammon@@@Z@std@@@Z)
+          9    8 00001EEC ?setOnRawPacketHandler@MulticastReceiver@cammon@@QEAAXV?$function@$$A6AXPEBEHPEBDH@Z@std@@@Z = @ILT+3815(?setOnRawPacketHandler@MulticastReceiver@cammon@@QEAAXV?$function@$$A6AXPEBEHPEBDH@Z@std@@@Z)
+         10    9 00001DD9 ?start@MulticastReceiver@cammon@@QEAA_NXZ = @ILT+3540(?start@MulticastReceiver@cammon@@QEAA_NXZ)
+         11    A 00002167 ?stop@MulticastReceiver@cammon@@QEAAXXZ = @ILT+4450(?stop@MulticastReceiver@cammon@@QEAAXXZ)
+         12    B 00001DAC Java_com_marble_cammon_CamMonNative_getLastStatus = @ILT+3495(Java_com_marble_cammon_CamMonNative_getLastStatus)
+         13    C 000011BD Java_com_marble_cammon_CamMonNative_getPTZ = @ILT+440(Java_com_marble_cammon_CamMonNative_getPTZ)
+         14    D 00001474 Java_com_marble_cammon_CamMonNative_setPTZ = @ILT+1135(Java_com_marble_cammon_CamMonNative_setPTZ)
+         15    E 00001DFC Java_com_marble_cammon_CamMonNative_startStatusListener = @ILT+3575(Java_com_marble_cammon_CamMonNative_startStatusListener)
+         16    F 000024F0 Java_com_marble_cammon_CamMonNative_stopStatusListener = @ILT+5355(Java_com_marble_cammon_CamMonNative_stopStatusListener)
+         17   10 00001B2C cam_controller_create = @ILT+2855(cam_controller_create)
+         18   11 00001B36 cam_controller_destroy = @ILT+2865(cam_controller_destroy)
+         19   12 00001AF5 cam_controller_get_last = @ILT+2800(cam_controller_get_last)
+         20   13 000021E4 cam_controller_get_ptz = @ILT+4575(cam_controller_get_ptz)
+         21   14 00002149 cam_controller_set_ptz = @ILT+4420(cam_controller_set_ptz)
+         22   15 000014B0 cam_controller_start_ex = @ILT+1195(cam_controller_start_ex)
+         23   16 00001D57 cam_controller_stop = @ILT+3410(cam_controller_stop)
+         24   17 00001BDB cammon_send_camera_command = @ILT+3030(cammon_send_camera_command)
+         25   18 000025EA cammon_send_packet = @ILT+5605(cammon_send_packet)
+         26   19 000018C0 cammon_send_servo_command = @ILT+2235(cammon_send_servo_command)
+         27   1A 00002513 cammon_send_udp_and_recv = @ILT+5390(cammon_send_udp_and_recv)
+
+  Summary
+
+        1000 .00cfg
+        1000 .data
+        4000 .idata
+        5000 .pdata
+       14000 .rdata
+        1000 .reloc
+        1000 .rsrc
+       3F000 .text
+        1000 .tls

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <localRepository>C:/repository</localRepository>
+  <mirrors>
+    <mirror>
+      <id>local-mirror</id>
+      <mirrorOf>*</mirrorOf>
+      <url>file:///C:/repository</url>
+    </mirror>
+  </mirrors>
+  <profiles>
+    <profile>
+      <id>offline-profile</id>
+      <properties>
+        <maven.repo.remote></maven.repo.remote>
+      </properties>
+    </profile>
+  </profiles>
+  <offline>true</offline>
+</settings>

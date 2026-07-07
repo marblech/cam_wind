@@ -59,6 +59,16 @@ struct CameraConfig {
     int timeout_ms = 2000;    ///< 命令超时时间（毫秒）
     int status_port = 8080;   ///< 状态监听端口
     
+    // 协议参数
+    uint8_t seq = 0x01;       ///< 数据包序列号
+    uint8_t ctrl = 0x11;      ///< 控制字节
+    uint8_t devtype = 0x01;   ///< 设备类型
+    uint8_t devip = 0x00;     ///< 设备 IP 标识
+    
+    // 若为 true，则在发送舵机帧时将 72 字节舵机帧放入标准帧的 data 区进行传输
+    // 厂家抓包示例使用此封装（外层帧头 0x0F 0xF0，addr=ADDR_SERVO）
+    bool wrap_servo_in_standard_packet = false;
+    
     CameraConfig() = default;
     CameraConfig(const std::string& h, int p, int timeout = 2000, int status_port = 8080)
         : host(h), port(p), timeout_ms(timeout), status_port(status_port) {}
@@ -67,6 +77,10 @@ struct CameraConfig {
 /// PTZ 回调函数类型定义
 /// 当接收到状态报告时触发: (azimuth, elevation, zoom, focus, 数据是否有效)
 using PTZCallback = std::function<void(float azimuth, float elevation, float zoom, float focus, bool valid)>;
+
+/// 报文回调函数类型定义
+/// 当发送命令时触发: (报文数据, 报文长度)
+using PacketCallback = std::function<void(const uint8_t* data, int len)>;
 
 /**
  * @brief Camera AJF 高层接口封装类
@@ -214,6 +228,16 @@ public:
     void on_ptz_update(PTZCallback callback);
     
     /**
+     * @brief 注册报文发送回调
+     * 
+     * 当发送命令报文时，会调用此回调函数通知调用者。
+     * 回调在发送线程中执行，请注意线程安全。
+     * 
+     * @param callback 回调函数，参数为(报文数据指针, 报文长度)
+     */
+    void on_packet_sent(PacketCallback callback);
+    
+    /**
      * @brief 获取当前配置
      * 
      * @return CameraConfig 当前配置
@@ -249,6 +273,11 @@ private:
     // 回调
     mutable std::mutex callback_mutex_;
     PTZCallback ptz_callback_;
+    
+    mutable std::mutex packet_callback_mutex_;
+    PacketCallback packet_callback_;
+    
+    void notify_packet_sent(const uint8_t* data, int len);
 };
 
 } // namespace cammon

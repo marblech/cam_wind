@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <vector>
 #include <optional>
+#include <array>
 
 namespace cammon {
 
@@ -186,7 +187,7 @@ enum CameraControl : uint8_t {
 
 // 通用常量
 static constexpr uint8_t DEFAULT_SEQ = 0x01;
-static constexpr uint8_t SERVO_CTRL_POSITION = 0x11; ///< 伺服位置控制字节（常用）
+static constexpr uint8_t SERVO_CTRL_POSITION = 0x09; ///< 伺服位置控制字节（低四位=1001b 表示伺服位置）
 static constexpr uint8_t SERVO_DEVICE_TYPE = 0x01;    ///< 舵机设备类型
 static constexpr uint8_t SERVO_PACKET_TYPE_POINT = 0x02; ///< 定点报文类型
 static constexpr uint8_t DEFAULT_MOVE_AMOUNT = 0x0A; ///< 默认移动量（十字线等）
@@ -575,7 +576,7 @@ Packet make_camera_command(uint8_t func, uint8_t ctrl, const std::vector<uint8_t
  * @param packet_type 数据包类型 (默认 0x02 表示定点报告)
  * @return std::vector<uint8_t> 序列化后的 72 字节向量
  */
-std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az_speed, float el_speed, uint16_t target_distance, uint8_t seq = 0x01, uint8_t control = 0x11, uint8_t device_type = 0x01, uint8_t packet_type = 0x02);
+std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az_speed, float el_speed, uint16_t target_distance, uint8_t seq = 0x01, uint8_t control = 0x09, uint8_t device_type = 0x01, uint8_t packet_type = 0x02);
 
 // ============================================================================
 // 舵机专用数据包结构 (帧起始符 0x7E)
@@ -584,7 +585,12 @@ std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az
 /**
  * @brief 舵机数据包结构
  * 
- * 帧格式: [0x7E][0x48][序列][设备类型][包类型][IP][保留][控制][保留][方位角][俯仰角][方位速度][俯仰速度][距离][保留33字节][保留2][保留2][时间戳][保留状态][备份][校验和]
+ * 帧格式 (协议 v0.06 3.3.8 节):
+ * [0x7E][帧长][序列][设备类型][包类型][IP][主控连接][控制][雨刷/加热]
+ * [方位角(f)][俯仰角(f)][方位速度(f)][俯仰速度(f)][目标距离(u16)]
+ * [目标俯仰偏差(u16)][跟踪方位偏差(f)][跟踪俯仰偏差(f)][视场角度(f)]
+ * [红外上电(u8)][备份22字节][时间戳(u32)][跟踪状态(u8)][备份(u16)][XOR校验]
+ * 
  * 固定帧长: 72 字节
  * 
  * 此结构专门用于舵机控制器的通信，
@@ -593,27 +599,33 @@ std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az
  * @note 舵机数据包使用小端字节序存储多字节字段
  */
 struct ServoPacket {
-    uint8_t header = 0x7E;              ///< 帧头固定值 (固定为 0x7E)
-    uint8_t frame_len = 0x48;           ///< 固定长度 (固定为 0x48 = 72 字节)
-    uint8_t seq = 0;                    ///< 序列号 (用于请求/响应匹配)
-    uint8_t device_type = 0;            ///< 源/目标设备类型 (0x01 表示舵机控制器)
-    uint8_t packet_type = 0;            ///< 数据包类型 (0x02 表示定点报告)
-    uint8_t device_ip = 0;              ///< 设备 IP 标识
-    uint8_t reserved_conn = 0;          ///< 保留字段 (连接相关)
-    uint8_t control = 0;                ///< 控制字节
-    uint8_t reserved_ctrl = 0;          ///< 保留字段 (控制相关)
-    float azimuth = 0.0f;               ///< 方位角 (4 字节小端浮点数，单位: 度)
-    float elevation = 0.0f;             ///< 俯仰角 (4 字节小端浮点数，单位: 度)
-    float az_speed = 0.0f;              ///< 方位角速度 (4 字节小端浮点数，单位: 度/秒)
-    float el_speed = 0.0f;              ///< 俯仰角速度 (4 字节小端浮点数，单位: 度/秒)
-    uint16_t target_distance = 0;       ///< 目标距离 (2 字节小端无符号整数，单位: 毫米)
-    std::vector<uint8_t> reserved;      ///< 保留字段 (33 字节)
-    uint16_t reserved_horz = 0;         ///< 保留字段 (水平相关，2 字节)
-    uint16_t reserved_vert = 0;         ///< 保留字段 (垂直相关，2 字节)
-    uint32_t timestamp = 0;             ///< 时间戳 (4 字节)
-    uint8_t reserved_state = 0;         ///< 保留字段 (状态相关)
-    uint16_t backup = 0;                ///< 备份数据 (2 字节)
-    uint8_t checksum = 0;               ///< 校验和 (位置 71 的 XOR 值)
+    uint8_t header = 0x7E;              ///< [0] 帧头固定值 (固定为 0x7E)
+    uint8_t frame_len = 0x48;           ///< [1] 固定长度 (固定为 0x48 = 72 字节)
+    uint8_t seq = 0;                    ///< [2] 报文编号/序列号 (0x00~0xFF循环)
+    uint8_t device_type = 0;            ///< [3] 设备类型 (源设备高字节/目标设备低字节)
+    uint8_t packet_type = 0;            ///< [4] 报文类型 (0x01广播/0x02定点/0x03秒同步/0x04链路测试)
+    uint8_t device_ip = 0;              ///< [5] 设备 IP 标识 (0x00主控/0x01图像处理板/0x02伺服驱动板)
+    uint8_t main_conn = 0;              ///< [6] 主控连接状态 (0x00无连接/0x01有连接)
+    uint8_t control = 0;                ///< [7] 控制字节 (Bit3~0:伺服模式, Bit5~4:跟踪源, Bit7~6:模式)
+    uint8_t wiper_heater_ctrl = 0;      ///< [8] 雨刷开关及加热模块控制 (Bit0~3:雨刷, Bit4~7:加热)
+    float azimuth = 0.0f;               ///< [9-12] 方位位置 (4字节float, 0~360°)
+    float elevation = 0.0f;             ///< [13-16] 俯仰位置 (4字节float, ±45°)
+    float az_speed = 0.0f;              ///< [17-20] 方位速度 (4字节float, ±100°/s)
+    float el_speed = 0.0f;              ///< [21-24] 俯仰速度 (4字节float, ±60°/s)
+    uint16_t target_distance = 0;       ///< [25-26] 目标距离 (2字节uint16_t, 单位:毫米)
+    int16_t target_el_aberration = 0;   ///< [27-28] 目标俯仰偏差 (2字节int16_t)
+    float track_az_aberration = 0.0f;   ///< [29-32] 跟踪方位偏差角度 (4字节float)
+    float track_el_aberration = 0.0f;   ///< [33-36] 跟踪俯仰偏差角度 (4字节float)
+    float fov_angle = 0.0f;             ///< [37-40] 视场角度 (4字节float)
+uint8_t ir_power_ctrl = 0;          ///< [41] 红外上电控制 (0x00下电/0x7F上电)
+uint8_t vis_focal_unit = 0;         ///< [42] 白光焦距单位 (0x00 = mm)
+float vis_focal_value = 0.0f;       ///< [43-46] 白光焦距 (float 小端，单位：mm)
+float ir_focal_value = 0.0f;        ///< [47-50] 红外焦距 (float 小端，单位：mm)
+std::array<uint8_t, 13> reserved = {0};  ///< [51-63] 备份字段 (13字节，填充0x00)
+uint32_t timestamp = 0;             ///< [64-67] 时间戳 (4字节, 基于0点秒计数)
+    uint8_t track_status = 0;           ///< [68] 跟踪状态 (Bit3~0:跟踪状态, Bit7~4:预留)
+    uint16_t backup = 0;                ///< [69-70] 备份数据 (2字节)
+    uint8_t checksum = 0;               ///< [71] 校验和 (索引0~70的XOR值)
 
     /**
      * @brief 将舵机数据包序列化为字节流
@@ -621,7 +633,7 @@ struct ServoPacket {
      * 根据当前 ServoPacket 对象的各字段值，构造 72 字节的帧字节序列。
      * 序列化过程：
      * 1. 按小端字节序组装多字节字段
-     * 2. 计算校验和
+     * 2. 计算校验和 (索引0~70的XOR)
      * 3. 组装完整帧
      * 
      * @return std::vector<uint8_t> 序列化后的 72 字节向量
@@ -639,6 +651,7 @@ struct ServoPacket {
      * 验证步骤：
      * 1. 检查缓冲区长度是否 >= 72 字节
      * 2. 验证帧头是否为 0x7E
+     * 3. 验证XOR校验和
      */
     static std::optional<ServoPacket> deserialize_servo(const std::vector<uint8_t>& buf);
 };

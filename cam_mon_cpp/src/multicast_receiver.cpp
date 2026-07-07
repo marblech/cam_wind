@@ -12,6 +12,9 @@
 #endif
 
 #ifdef _WIN32
+#include <iphlpapi.h>
+#pragma comment(lib, "iphlpapi.lib")
+
 static bool g_winsock_initialized = false;
 
 static void ensure_winsock_init() {
@@ -43,9 +46,44 @@ CAMMON_API MulticastReceiver::~MulticastReceiver() {
 }
 
 #ifdef _WIN32
-// Windows 下获取第一个支持组播的接口地址（简化版）
+// Windows 下自动检测支持组播的网络接口
 static std::string detect_multicast_interface() {
-    return "192.168.5.188"; // 默认返回一个接口，用户应手动指定
+    ULONG bufLen = 0;
+    GetAdaptersAddresses(AF_INET,
+        GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+        nullptr, nullptr, &bufLen);
+
+    std::vector<uint8_t> buffer(bufLen);
+    auto addresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
+
+    ULONG result = GetAdaptersAddresses(AF_INET,
+        GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+        nullptr, addresses, &bufLen);
+
+    if (result != ERROR_SUCCESS) {
+        fprintf(stderr, "[MulticastReceiver] GetAdaptersAddresses 失败: %lu\n", result);
+        return "";
+    }
+
+    for (auto adapter = addresses; adapter; adapter = adapter->Next) {
+        if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        if (adapter->OperStatus != IfOperStatusUp) continue;
+
+        for (auto ua = adapter->FirstUnicastAddress; ua; ua = ua->Next) {
+            sockaddr* sa = ua->Address.lpSockaddr;
+            if (sa->sa_family == AF_INET) {
+                char ip[INET_ADDRSTRLEN];
+                auto sin = reinterpret_cast<sockaddr_in*>(sa);
+                inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip));
+                fprintf(stderr, "[MulticastReceiver] 检测到适配器: %ls, IP: %s\n",
+                        adapter->FriendlyName ? adapter->FriendlyName : L"(unknown)", ip);
+                return ip;
+            }
+        }
+    }
+
+    fprintf(stderr, "[MulticastReceiver] 未找到可用的网络接口\n");
+    return "";
 }
 #else
 // Linux 下自动检测支持组播的网络接口

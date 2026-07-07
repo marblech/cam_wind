@@ -3,6 +3,9 @@
 #include "cammon_api.h"  // 底层 API 声明
 #include "plog_init.h"
 
+#include <sstream>
+#include <iomanip>
+
 #ifdef _WIN32
     #ifndef NOMINMAX
         #define NOMINMAX
@@ -139,7 +142,8 @@ bool CamAJFLib::initWithConfig(const CameraConfig& config) {
     }
     
     PLOG_INFO << "[CamAJFLib] Initialized: host=" << config.host 
-              << " port=" << config.port << " timeout=" << config.timeout_ms << "ms";
+              << " port=" << config.port << " timeout=" << config.timeout_ms << "ms"
+              << " status_port=" << config.status_port;
     return true;
 }
 
@@ -179,6 +183,11 @@ bool CamAJFLib::start() {
         return false;
     }
     
+    // 设置 SO_REUSEADDR 以允许端口重用，避免端口占用后无法重新绑定
+    int reuse = 1;
+    setsockopt(status_sock_, SOL_SOCKET, SO_REUSEADDR,
+               reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+    
     // 绑定到状态监听端口
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -188,9 +197,9 @@ bool CamAJFLib::start() {
     if (bind(status_sock_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
 #ifdef _WIN32
         int err = WSAGetLastError();
-        PLOG_ERROR << "[CamAJFLib] bind failed, error=" << err;
+        PLOG_ERROR << "[CamAJFLib] bind failed on port " << config_.status_port << ", error=" << err;
 #else
-        PLOG_ERROR << "[CamAJFLib] bind failed: " << strerror(errno);
+        PLOG_ERROR << "[CamAJFLib] bind failed on port " << config_.status_port << ": " << strerror(errno);
 #endif
         close_udp_socket(status_sock_);
         status_sock_ = -1;
@@ -237,61 +246,104 @@ bool CamAJFLib::set_ptz(float azimuth, float elevation, float az_speed, float el
 
 bool CamAJFLib::set_ptz(float azimuth, float elevation, float zoom, float az_speed, float el_speed) {
     // 构建并发送舵机控制数据包（位置控制）
+    // 使用配置中的协议参数
     std::vector<uint8_t> packet = build_servo_packet(
         azimuth, elevation, az_speed, el_speed, 
         /*target_distance=*/0,  // 默认不使用距离
-        /*seq=*/DEFAULT_SEQ,
-        /*control=*/SERVO_CTRL_POSITION,  // 位置控制标志
-        /*device_type=*/SERVO_DEVICE_TYPE,
+        /*seq=*/config_.seq,
+        /*control=*/config_.ctrl,  // 使用配置中的控制字节
+        /*device_type=*/config_.devtype,  // 使用配置中的设备类型
         /*packet_type=*/SERVO_PACKET_TYPE_POINT
     );
+    
+    // 将当前焦距填入舵机包内部字段（内部偏移基于 ServoPacket 布局）
+    // 协议约定（内部索引，从0开始）:
+    // [42] 白光焦距单位 (uint8, 0x00 = mm)
+    // [43-46] 白光焦距 (float LE, mm)
+    // [47-50] 红外焦距 (float LE, mm)
+    {
+        float vis_focus = 0.0f;
+        float ir_focus = 0.0f;
+        {
+            std::lock_guard<std::mutex> lock(ptz_mutex_);
+            vis_focus = current_ptz_.focus;
+            // 若没有单独的红外焦距来源，使用可见光焦距作为占位
+            ir_focus = current_ptz_.focus;
+        }
+        // 写入单位字节（0x00 = mm）
+        if (packet.size() >= 72) {
+            packet[42] = 0x00;
+            // 写入 vis_focus (float little-endian) 到 [43..46]
+            uint32_t vbits;
+            std::memcpy(&vbits, &vis_focus, sizeof(vbits));
+            packet[43] = static_cast<uint8_t>(vbits & 0xFF);
+            packet[44] = static_cast<uint8_t>((vbits >> 8) & 0xFF);
+            packet[45] = static_cast<uint8_t>((vbits >> 16) & 0xFF);
+            packet[46] = static_cast<uint8_t>((vbits >> 24) & 0xFF);
+            // 写入 ir_focus (float little-endian) 到 [47..50]
+            std::memcpy(&vbits, &ir_focus, sizeof(vbits));
+            packet[47] = static_cast<uint8_t>(vbits & 0xFF);
+            packet[48] = static_cast<uint8_t>((vbits >> 8) & 0xFF);
+            packet[49] = static_cast<uint8_t>((vbits >> 16) & 0xFF);
+            packet[50] = static_cast<uint8_t>((vbits >> 24) & 0xFF);
+            // 重新计算 XOR 校验 (索引 0..70) 并写入 [71]
+            uint8_t cs = 0;
+            for (size_t i = 0; i < 71 && i < packet.size(); ++i) cs ^= packet[i];
+            if (packet.size() > 71) packet[71] = cs;
+        } else {
+            PLOG_WARNING << "[CamAJFLib] Servo packet too small to patch focal fields";
+        }
+    }
+    
+    // 打印发送的报文（十六进制）
+    std::ostringstream oss;
+    oss << "[CamAJFLib] 发送报文 (" << packet.size() << "字节): ";
+    for (size_t i = 0; i < packet.size() && i < 72; ++i) {
+        oss << std::hex << std::uppercase << std::setfill('0') << std::setw(2) << (int)packet[i] << " ";
+    }
+    PLOG_INFO << oss.str();
     
     sockaddr_in serv{};
     serv.sin_family = AF_INET;
     serv.sin_port = htons(config_.port);
     inet_pton(AF_INET, config_.host.c_str(), &serv.sin_addr);
     
-    ssize_t sent = sendto(cmd_sock_, reinterpret_cast<const char*>(packet.data()), packet.size(), 0, reinterpret_cast<sockaddr*>(&serv), sizeof(serv));
-    if (sent < 0) {
-        PLOG_ERROR << "[CamAJFLib] Failed to send servo command";
-        return false;
-    }
-    
-    // 尝试接收舵机响应（短超时）
-    uint8_t buf[4096];
-    sockaddr_in peer{};
-    socklen_t plen = sizeof(peer);
-    struct timeval rtv;
-    rtv.tv_sec = 0;
-    rtv.tv_usec = 500000;  // 500ms
-    setsockopt(cmd_sock_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&rtv), sizeof(rtv));
-    ssize_t n = recvfrom(cmd_sock_, reinterpret_cast<char*>(buf), sizeof(buf), 0, reinterpret_cast<sockaddr*>(&peer), &plen);
-    // 恢复原始超时
-    struct timeval orig_tv;
-    orig_tv.tv_sec = config_.timeout_ms / 1000;
-    orig_tv.tv_usec = (config_.timeout_ms % 1000) * 1000;
-    setsockopt(cmd_sock_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&orig_tv), sizeof(orig_tv));
-    
-    if (n > 0) {
-        std::vector<uint8_t> resp(buf, buf + n);
-        auto servo_resp = ServoPacket::deserialize_servo(resp);
-        if (servo_resp) {
-            std::lock_guard<std::mutex> lock(ptz_mutex_);
-            current_ptz_.azimuth = servo_resp->azimuth;
-            current_ptz_.elevation = servo_resp->elevation;
-            current_ptz_.valid = true;
-            PLOG_INFO << "[CamAJFLib] PTZ response: az=" << servo_resp->azimuth 
-                      << " el=" << servo_resp->elevation;
-            broadcast_ptz_update();
+    if (config_.wrap_servo_in_standard_packet) {
+        // 将舵机帧作为标准帧的 data 部分封装并发送
+        Packet outer;
+        outer.addr = ADDR_SERVO;
+        outer.func = 0x00;
+        outer.ctrl = 0x00;
+        outer.data = packet;
+        auto out = outer.serialize();
+
+        ssize_t sent = sendto(cmd_sock_, reinterpret_cast<const char*>(out.data()), out.size(), 0, reinterpret_cast<sockaddr*>(&serv), sizeof(serv));
+        if (sent < 0) {
+            PLOG_ERROR << "[CamAJFLib] Failed to send wrapped servo command";
+            return false;
         }
+
+        // 通知回调：发送的实际字节为 outer.serialize()
+        notify_packet_sent(out.data(), static_cast<int>(out.size()));
+        PLOG_INFO << "[CamAJFLib] PTZ command sent (wrapped): az=" << azimuth << " el=" << elevation << " zoom=" << zoom;
     } else {
-        PLOG_INFO << "[CamAJFLib] PTZ command sent (no response): az=" << azimuth << " el=" << elevation;
+        ssize_t sent = sendto(cmd_sock_, reinterpret_cast<const char*>(packet.data()), packet.size(), 0, reinterpret_cast<sockaddr*>(&serv), sizeof(serv));
+        if (sent < 0) {
+            PLOG_ERROR << "[CamAJFLib] Failed to send servo command";
+            return false;
+        }
+
+        // 通知报文回调
+        notify_packet_sent(packet.data(), static_cast<int>(packet.size()));
+
+        // 日志记录：命令已发送（由状态监听线程获取响应更新状态）
+        PLOG_INFO << "[CamAJFLib] PTZ command sent: az=" << azimuth << " el=" << elevation << " zoom=" << zoom;
     }
     
     // 发送摄像机变焦/焦距命令 —— 将传入的 zoom 值作为焦距（mm）直达设置
     // 用户提供的示例报文使用 function=0x06, ctrl=0x00, data[0..3]=float little-endian 表示 100.0
     if (zoom >= 0.0f) {
-        // 调用 set_focus 以发送正确的“焦距直达”报文
+        // 调用 set_focus 以发送正确的"焦距直达"报文
         if (!set_focus(zoom)) {
             PLOG_ERROR << "[CamAJFLib] Failed to send focus command for zoom=" << zoom;
             // 不因焦距命令失败而视为整体失败，仍返回 true（舵机命令已发送）
@@ -335,7 +387,7 @@ bool CamAJFLib::set_zoom(float zoom) {
 }
 
 bool CamAJFLib::set_focus(float focus) {
-    // 按协议发送“焦距直达”命令（示例报文使用 function=0x06, ctrl=0x00，data[0..3]=float LE）
+    // 按协议发送"焦距直达"命令（示例报文使用 function=0x06, ctrl=0x00，data[0..3]=float LE）
     std::vector<uint8_t> payload(15, 0x00);
     // 将浮点焦距按小端字节序写入 payload[0..3]
     uint32_t bits = 0;
@@ -375,6 +427,18 @@ bool CamAJFLib::set_focus(float focus) {
 void CamAJFLib::on_ptz_update(PTZCallback callback) {
     std::lock_guard<std::mutex> lock(callback_mutex_);
     ptz_callback_ = std::move(callback);
+}
+
+void CamAJFLib::on_packet_sent(PacketCallback callback) {
+    std::lock_guard<std::mutex> lock(packet_callback_mutex_);
+    packet_callback_ = std::move(callback);
+}
+
+void CamAJFLib::notify_packet_sent(const uint8_t* data, int len) {
+    std::lock_guard<std::mutex> lock(packet_callback_mutex_);
+    if (packet_callback_) {
+        packet_callback_(data, len);
+    }
 }
 
 // ============================================================================

@@ -209,56 +209,69 @@ static void write_le_float(std::vector<uint8_t>& out, float f) {
 /**
  * @brief 将舵机数据包序列化为 72 字节 UDP 帧
  * 
- * 序列化格式:
- * [0x7E][0x48][序列][设备类型][包类型][IP][保留][控制][保留]
- * [方位角(f)][俯仰角(f)][方位速度(f)][俯仰速度(f)][距离(u16)]
- * [保留33字节][保留2(u16)][保留2(u16)][时间戳(u32)][保留状态][备份(u16)][校验和]
+ * 序列化格式 (协议 v0.06 3.3.8 节):
+ * [0x7E][0x48][序列][设备类型][包类型][IP][主控连接][控制][雨刷/加热]
+ * [方位角(f)][俯仰角(f)][方位速度(f)][俯仰速度(f)][目标距离(u16)]
+ * [目标俯仰偏差(i16)][跟踪方位偏差(f)][跟踪俯仰偏差(f)][视场角度(f)]
+ * [红外上电(u8)][备份22字节][时间戳(u32)][跟踪状态(u8)][备份(u16)][XOR校验]
  * 
- * 校验和计算: 从索引 0 到 70（包含帧头 0x7E，在校验字节之前的所有字节）
+ * 校验和计算: 对索引 0 到 70 进行 XOR (异或) 校验
  * 
  * @return std::vector<uint8_t> 72 字节序列化向量
  */
 std::vector<uint8_t> ServoPacket::serialize_servo() const {
     std::vector<uint8_t> out;
-    out.push_back(header);
-    out.push_back(frame_len);
-    out.push_back(seq);
-    out.push_back(device_type);
-    out.push_back(packet_type);
-    out.push_back(device_ip);
-    out.push_back(reserved_conn);
-    out.push_back(control);
-    out.push_back(reserved_ctrl);
+    out.reserve(72);
     
-    // 写入浮点数值（小端字节序）
-    write_le_float(out, azimuth);
-    write_le_float(out, elevation);
-    write_le_float(out, az_speed);
-    write_le_float(out, el_speed);
+    // [0-8] 头部和控制字段
+    out.push_back(header);           // [0] 帧头 0x7E
+    out.push_back(frame_len);        // [1] 帧长 0x48
+    out.push_back(seq);              // [2] 报文编号
+    out.push_back(device_type);      // [3] 设备类型
+    out.push_back(packet_type);      // [4] 报文类型
+    out.push_back(device_ip);        // [5] 设备IP
+    out.push_back(main_conn);        // [6] 主控连接
+    out.push_back(control);          // [7] 控制字节
+    out.push_back(wiper_heater_ctrl);// [8] 雨刷/加热控制
     
-    // 写入目标距离
-    write_le_uint16(out, target_distance);
+    // [9-24] 位置和速度字段 (float 小端)
+    write_le_float(out, azimuth);    // [9-12] 方位位置
+    write_le_float(out, elevation);  // [13-16] 俯仰位置
+    write_le_float(out, az_speed);   // [17-20] 方位速度
+    write_le_float(out, el_speed);   // [21-24] 俯仰速度
     
-    // 写入 33 字节保留字段
-    if (reserved.size() < 33) {
-        std::vector<uint8_t> r = reserved;
-        r.resize(33, 0x00);
-        out.insert(out.end(), r.begin(), r.end());
-    } else {
-        out.insert(out.end(), reserved.begin(), reserved.begin() + 33);
-    }
+    // [25-28] 目标偏差字段
+    write_le_uint16(out, target_distance);         // [25-26] 目标距离
+    // 写入 target_el_aberration (int16_t 小端)
+    uint16_t el_aberr_u16 = static_cast<uint16_t>(target_el_aberration & 0xFFFF);
+    write_le_uint16(out, el_aberr_u16);            // [27-28] 目标俯仰偏差
     
-    // 写入剩余字段
-    write_le_uint16(out, reserved_horz);
-    write_le_uint16(out, reserved_vert);
-    write_le_uint32(out, timestamp);
-    out.push_back(reserved_state);
-    write_le_uint16(out, backup);
+    // [29-41] 跟踪和视场字段
+    write_le_float(out, track_az_aberration);  // [29-32] 跟踪方位偏差角度
+    write_le_float(out, track_el_aberration);  // [33-36] 跟踪俯仰偏差角度
+    write_le_float(out, fov_angle);            // [37-40] 视场角度
     
-    // 计算校验和: XOR 索引 0 到 70（包含帧头 0x7E）
+    // [41] 红外上电控制
+    out.push_back(ir_power_ctrl);              // [41] 红外上电控制
+
+    // 新增焦距字段：白光焦距单位 + 白光焦距(float LE) + 红外焦距(float LE)
+    out.push_back(vis_focal_unit);             // [42] 白光焦距单位 (0x00 = mm)
+    write_le_float(out, vis_focal_value);      // [43-46] 白光焦距 (float LE, mm)
+    write_le_float(out, ir_focal_value);       // [47-50] 红外焦距 (float LE, mm)
+
+    // [51-63] 备份字段 (13字节)
+    out.insert(out.end(), reserved.begin(), reserved.end());
+
+    // [64-70] 尾部字段
+    write_le_uint32(out, timestamp);           // [64-67] 时间戳
+    out.push_back(track_status);               // [68] 跟踪状态
+    write_le_uint16(out, backup);              // [69-70] 备份数据
+    
+    // [71] 计算校验和: XOR 索引 0 到 70
     uint8_t cs = 0;
     for (size_t i = 0; i < 71; ++i) cs ^= out[i];
-    out.push_back(cs);
+    out.push_back(cs);                           // [71] 校验和
+    
     return out;
 }
 
@@ -287,9 +300,9 @@ std::optional<ServoPacket> ServoPacket::deserialize_servo(const std::vector<uint
     s.device_type = buf[idx++];
     s.packet_type = buf[idx++];
     s.device_ip = buf[idx++];
-    s.reserved_conn = buf[idx++];
+    s.main_conn = buf[idx++];
     s.control = buf[idx++];
-    s.reserved_ctrl = buf[idx++];
+    s.wiper_heater_ctrl = buf[idx++];
     
     // 辅助 lambda: 读取小端整数/浮点
     auto read_le_uint32 = [&](uint32_t &out)->void{
@@ -300,28 +313,66 @@ std::optional<ServoPacket> ServoPacket::deserialize_servo(const std::vector<uint
         out = (uint16_t)buf[idx] | ((uint16_t)buf[idx+1]<<8);
         idx += 2;
     };
+    auto read_le_int16 = [&](int16_t &out)->void{
+        uint16_t tmp;
+        read_le_uint16(tmp);
+        out = static_cast<int16_t>(tmp);
+    };
     auto read_le_float = [&](float &out)->void{
         uint32_t v;
         read_le_uint32(v);
         memcpy(&out, &v, 4);
     };
     
-    // 读取浮点数值
+    // 读取位置和速度字段 (float)
     read_le_float(s.azimuth);
     read_le_float(s.elevation);
     read_le_float(s.az_speed);
     read_le_float(s.el_speed);
     
-    // 读取剩余字段
-    read_le_uint16(s.target_distance);
-    s.reserved.assign(buf.begin() + idx, buf.begin() + idx + 33);
-    idx += 33;
-    read_le_uint16(s.reserved_horz);
-    read_le_uint16(s.reserved_vert);
-    read_le_uint32(s.timestamp);
-    s.reserved_state = buf[idx++];
-    read_le_uint16(s.backup);
-    s.checksum = buf[idx++];
+    // 读取目标偏差字段
+    read_le_uint16(s.target_distance);           // [25-26] 目标距离
+    read_le_int16(s.target_el_aberration);       // [27-28] 目标俯仰偏差 (int16_t)
+    
+    // 读取跟踪和视场字段 (float)
+    read_le_float(s.track_az_aberration);        // [29-32] 跟踪方位偏差角度
+    read_le_float(s.track_el_aberration);        // [33-36] 跟踪俯仰偏差角度
+    read_le_float(s.fov_angle);                  // [37-40] 视场角度
+    
+    // [41] 红外上电控制
+    s.ir_power_ctrl = buf[idx++];
+
+    // 白光/红外焦距字段及保留区
+    s.vis_focal_unit = buf[idx++]; // [42]
+
+    // 读取白光焦距 (float 小端) [43-46]
+    {
+        uint32_t vv = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1] << 8) | ((uint32_t)buf[idx+2] << 16) | ((uint32_t)buf[idx+3] << 24);
+        float v;
+        memcpy(&v, &vv, 4);
+        s.vis_focal_value = v;
+        idx += 4;
+    }
+
+    // 读取红外焦距 (float 小端) [47-50]
+    {
+        uint32_t vv = (uint32_t)buf[idx] | ((uint32_t)buf[idx+1] << 8) | ((uint32_t)buf[idx+2] << 16) | ((uint32_t)buf[idx+3] << 24);
+        float v;
+        memcpy(&v, &vv, 4);
+        s.ir_focal_value = v;
+        idx += 4;
+    }
+
+    // [51-63] 备份字段 (13字节)
+    std::copy(buf.begin() + idx, buf.begin() + idx + 13, s.reserved.begin());
+    idx += 13;
+
+    // [64-70] 尾部字段
+    read_le_uint32(s.timestamp);                 // [64-67] 时间戳
+    s.track_status = buf[idx++];                 // [68] 跟踪状态
+    read_le_uint16(s.backup);                    // [69-70] 备份数据
+    
+    s.checksum = buf[idx++];                     // [71] 校验和
     
     // 验证校验和: XOR 索引 0 到 70（包含帧头 0x7E）
     uint8_t cs = 0;
@@ -341,15 +392,15 @@ std::optional<ServoPacket> ServoPacket::deserialize_servo(const std::vector<uint
  * 这是高层接口函数，用于构建标准舵机控制指令并序列化。
  * 默认构造一个定点报告类型 (packet_type = 0x02) 的数据包。
  * 
- * @param azimuth 方位角（度），范围通常为 -180° 到 +180°
+ * @param azimuth 方位角（度），范围通常为 0° 到 360°
  * @param elevation 俯仰角（度），范围通常为 -90° 到 +90°
  * @param az_speed 方位角速度（度/秒）
  * @param el_speed 俯仰角速度（度/秒）
  * @param target_distance 目标距离（毫米）
  * @param seq 序列号（用于匹配请求和响应）
- * @param control 控制字节（0xFF 通常表示运动控制）
- * @param device_type 设备类型（0x01 表示舵机控制器）
- * @param packet_type 数据包类型（0x02 表示定点报告）
+ * @param control 控制字节（Bit3~0:伺服模式, Bit5~4:跟踪源, Bit7~6:模式）
+ * @param device_type 设备类型（源设备高字节/目标设备低字节）
+ * @param packet_type 数据包类型（0x01广播/0x02定点/0x03秒同步/0x04链路测试）
  * @return std::vector<uint8_t> 序列化后的 72 字节向量
  */
 std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az_speed, float el_speed, uint16_t target_distance, uint8_t seq, uint8_t control, uint8_t device_type, uint8_t packet_type) {
@@ -359,21 +410,24 @@ std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az
     s.seq = seq;
     s.device_type = device_type;
     s.packet_type = packet_type;
-    s.device_ip = 0x00;
-    s.reserved_conn = 0x00;
-    s.control = control;
-    s.reserved_ctrl = 0x00;
+    s.device_ip = 0x00;           // 设备IP (0x00=主控)
+    s.main_conn = 0x00;           // 主控连接状态 (0x00=无连接)
+    s.control = control;          // 控制字节
+    s.wiper_heater_ctrl = 0x00;   // 雨刷/加热控制 (默认关闭)
     s.azimuth = azimuth;
     s.elevation = elevation;
     s.az_speed = az_speed;
     s.el_speed = el_speed;
     s.target_distance = target_distance;
-    s.reserved = std::vector<uint8_t>(33, 0);
-    s.reserved_horz = 0;
-    s.reserved_vert = 0;
-    s.timestamp = 0;
-    s.reserved_state = 0;
-    s.backup = 0;
+    s.target_el_aberration = 0;       // 目标俯仰偏差
+    s.track_az_aberration = 0.0f;     // 跟踪方位偏差角度
+    s.track_el_aberration = 0.0f;     // 跟踪俯仰偏差角度
+    s.fov_angle = 0.0f;               // 视场角度
+    s.ir_power_ctrl = 0x00;           // 红外下电
+    s.reserved.fill(0);  // 备份字段 (13字节)
+    s.timestamp = 0;                  // 时间戳
+    s.track_status = 0x00;            // 跟踪状态 (0x00=未跟踪)
+    s.backup = 0;                     // 备份数据
     return s.serialize_servo();
 }
 

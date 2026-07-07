@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
         int n = cam_controller_get_last(c, buf, sizeof(buf));
         std::cerr << "Iteration " << i << ": last packet len=" << n << "\n";
         float az=0, el=0, ir=0, vis=0;
-        if (cam_controller_get_ptz(c, &az, &el, &ir, &vis)) {
+        if (cam_controller_get_ptz(c, nullptr, &az, &el, &ir, &vis)) {
             std::cerr << " PTZ az=" << az << " el=" << el << " ir=" << ir << " vis=" << vis << "\n";
         }
         ++i;

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(NOT DEFINED Boost_DIR)
     if(WIN32)
-        set(Boost_DIR "J:/boost_1_82_0/stage/lib/cmake/Boost-1.82.0" CACHE PATH "Boost CMake config dir (Windows)")
+        set(Boost_DIR "C:/boost_1_82_0/boost_1_82_0/stage/lib/cmake/Boost-1.82.0" CACHE PATH "Boost CMake config dir (Windows)")
     else()
         set(Boost_DIR "/usr/local/boost_1_82_0/lib/cmake/Boost-1.82.0" CACHE PATH "Boost CMake config dir (Linux)")
     endif()
@@ -27,10 +27,10 @@ find_package(Boost REQUIRED COMPONENTS system filesystem date_time)
 set(LIB_OUTPUT_DIR ${CMAKE_SOURCE_DIR}/build)
 
 # Sources - use actual files
+# JNA does not require JNI bridge code (cammon_jni.cpp)
 set(CAMMON_SOURCES
     src/cammon_api.cpp
     src/protocol.cpp
-    src/cammon_jni.cpp
     src/cam_controller.cpp
     src/cam_ajf_lib.cpp
     src/multicast_receiver.cpp
@@ -60,6 +60,9 @@ if(MSVC AND WIN32)
     if(NOT DEFINED CMAKE_GENERATOR_TOOLSET)
         set(CMAKE_GENERATOR_TOOLSET "v142" CACHE STRING "MSVC toolset" FORCE)
     endif()
+    # Force UTF-8 source and execution character sets for MSVC
+    # This fixes compilation errors when source files contain UTF-8 encoded Chinese characters
+    add_compile_options(/utf-8)
 endif()
 
 target_include_directories(cammon PUBLIC
@@ -81,12 +84,8 @@ if(WIN32)
         WIN32_LEAN_AND_MEAN
         CAMMON_EXPORTS
     )
-    # Link Winsock and JNI
-    target_link_libraries(cammon ws2_32)
-    target_include_directories(cammon PRIVATE
-        $ENV{JAVA_HOME}/include
-        $ENV{JAVA_HOME}/include/win32
-    )
+    # Link Winsock
+    target_link_libraries(cammon ws2_32 iphlpapi)
     # Set output name and suffix
     set_target_properties(cammon PROPERTIES
         OUTPUT_NAME cammon
@@ -98,10 +97,6 @@ if(WIN32)
 else()
     # Linux
     target_link_libraries(cammon pthread Boost::system Boost::filesystem Boost::date_time)
-    target_include_directories(cammon PRIVATE
-        $ENV{JAVA_HOME}/include
-        $ENV{JAVA_HOME}/include/linux
-    )
     set_target_properties(cammon PROPERTIES
         OUTPUT_NAME cammon
         SUFFIX .so
@@ -163,6 +158,7 @@ set_target_properties(cam_controller_example PROPERTIES
 # PTZ control test
 # ============================================================================
 add_executable(test_ptz_control src/test_ptz_control.cpp)
+
 if(WIN32)
     target_link_libraries(test_ptz_control PRIVATE cammon ws2_32)
 else()
