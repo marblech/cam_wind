@@ -28,6 +28,7 @@ set(LIB_OUTPUT_DIR ${CMAKE_SOURCE_DIR}/build)
 
 # Sources - use actual files
 # JNA does not require JNI bridge code (cammon_jni.cpp)
+# JNA does not require JNI bridge code (cammon_jni.cpp)
 set(CAMMON_SOURCES
     src/cammon_api.cpp
     src/protocol.cpp

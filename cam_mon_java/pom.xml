@@ -151,6 +151,7 @@
   </build>
 
   <!-- Platform-specific profile: Windows uses build/jna and ';' path separator -->
+  <!-- Platform-specific profile: Windows uses build/jna and ';' path separator -->
   <profiles>
     <profile>
       <id>windows</id>
@@ -160,6 +161,7 @@
         </os>
       </activation>
       <properties>
+        <native.dir>${project.basedir}/../cam_mon_cpp/build/jna</native.dir>
         <native.dir>${project.basedir}/../cam_mon_cpp/build/jna</native.dir>
         <path.separator>;</path.separator>
       </properties>
