@@ -16,7 +16,7 @@ import java.nio.ByteBuffer;
 public class DllTest {
 
     /** 回显服务器端口（模拟设备） */
-    private static final int ECHO_PORT = 5001;
+    private static final int ECHO_PORT = 1234;
     /** 控制器监听端口（接收状态） */
     private static final int LISTEN_PORT = 23232;
 
@@ -45,20 +45,16 @@ public class DllTest {
 
         // 第三步：发送舵机控制命令
         System.out.println("[3/5] 发送舵机控制命令...");
-        System.out.println("  目标: 127.0.0.1:" + ECHO_PORT);
+        System.out.println("  目标: 192.168.1.7:" + ECHO_PORT);
         System.out.println("  az=123.45, el=10.0, azSpeed=1.5, elSpeed=0.5");
         System.out.println("  targetDistance=1000mm, timeout=3000ms");
         
         int byteCount = CamMonNative.setPTZ(
-            "127.0.0.1", ECHO_PORT,
-            123.45f, 10.0f,  // az, el
-            1.5f, 0.5f,      // azSpeed, elSpeed
-            1000,            // targetDistance (mm)
-            1,               // seq
-            1,               // control
-            Protocol.SERVO_DEVICE_TYPE,
-            Protocol.SERVO_PACKET_TYPE_POINT,
-            3000             // timeout (ms)
+            "192.168.1.7",
+            ECHO_PORT,
+            60.0f, 20.0f,  // az, el
+            30.0f,         // zoom (mm)
+            0
         );
         System.out.println();
 
@@ -88,7 +84,7 @@ public class DllTest {
 
         // 第五步：使用 getPTZ() 接口获取解析后的 PTZ 数据
         System.out.println("[5/5] 使用 getPTZ() 接口获取解析后的 PTZ 数据...");
-        PTZStatus ptz = CamMonNative.getPTZ("172.17.88.15");
+        PTZStatus ptz = CamMonNative.getPTZ("192.168.1.7");
         if (ptz != null) {
             System.out.println("  成功获取 PTZ 数据:");
             System.out.println("    az (方位角):      " + String.format("%.2f", ptz.az) + "°");

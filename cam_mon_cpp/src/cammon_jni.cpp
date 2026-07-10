@@ -150,10 +150,10 @@ JNIEXPORT jobject JNICALL Java_com_marble_cammon_CamMonNative_getPTZ(JNIEnv* env
  */
 JNIEXPORT jint JNICALL Java_com_marble_cammon_CamMonNative_setPTZ(JNIEnv* env, jclass, jstring jhost, jint port, jfloat az, jfloat el, jfloat azs, jfloat els, jint targetDistance, jint seq, jint control, jint deviceType, jint packetType, jint timeoutMs) {
     const char* host = env->GetStringUTFChars(jhost, NULL);
-    PLOG_INFO << "Java call: setPTZ host=" << (host?host:"(null)") << " port=" << port << " az=" << az << " el=" << el << " azs=" << azs << " els=" << els << " targetDistance=" << targetDistance << " seq=" << seq << " control=" << control << " deviceType=" << deviceType << " packetType=" << packetType << " timeoutMs=" << timeoutMs;
-    const int RESP_MAX = 2048;
-    std::unique_ptr<uint8_t[]> resp(new uint8_t[RESP_MAX]);
-    int r = cam_controller_set_ptz(g_controller, host, (int)port, (float)az, (float)el, (float)azs, (float)els, (uint16_t)targetDistance, (uint8_t)seq, (uint8_t)control, (uint8_t)deviceType, (uint8_t)packetType, resp.get(), RESP_MAX, (int)timeoutMs);
+    PLOG_INFO << "Java call (JNI): setPTZ host=" << (host?host:"(null)") << " az=" << az << " el=" << el << " zoom(mm)=" << targetDistance << " deviceType=" << deviceType;
+    // Map previous parameters: use targetDistance as zoom (mm)
+    float zoom = static_cast<float>(targetDistance);
+    int r = cam_controller_set_ptz(g_controller, host, (float)az, (float)el, zoom, (uint8_t)deviceType);
     env->ReleaseStringUTFChars(jhost, host);
     return r;
 }

@@ -206,21 +206,10 @@ public class CamMonNative {
                               float azSpeed, float elSpeed, int targetDistance, 
                               int seq, int control, int deviceType, 
                               int packetType, int timeoutMs) {
-        if (g_controller == null) {
-            return -1;
-        }
-        
-        byte[] resp = new byte[2048];
-        int result = CamMonLibrary.INSTANCE.cam_controller_set_ptz(
-            g_controller,
-            host, port,
-            az, el, azSpeed, elSpeed,
-            (short) targetDistance,
-            (byte) seq, (byte) control,
-            (byte) deviceType, (byte) packetType,
-            resp, resp.length, timeoutMs);
-        
-        return result;
+        // Backwards compatibility wrapper: map to simplified API using targetDistance as zoom
+        if (g_controller == null) return -1;
+        float zoom = (float) targetDistance;
+        return setPTZ(host, az, el, zoom, deviceType);
     }
     
     // =========================================================================
@@ -245,8 +234,8 @@ public class CamMonNative {
     public static int setPTZ(String host, int port, float az, float el, 
                               float azSpeed, float elSpeed, int targetDistance, 
                               int seq, int control, int timeoutMs) {
-        return setPTZ(host, port, az, el, azSpeed, elSpeed, targetDistance, 
-                      seq, control, 0x01, 0x20, timeoutMs);
+        float zoom = (float) targetDistance;
+        return setPTZ(host, az, el, zoom, 0x01);
     }
     
     /**
@@ -262,6 +251,28 @@ public class CamMonNative {
      */
     public static int setPTZ(String host, int port, float az, float el, 
                               float azSpeed, float elSpeed) {
-        return setPTZ(host, port, az, el, azSpeed, elSpeed, 0, 0, 0, 1000);
+        return setPTZ(host, az, el, -1.0f, 0x01);
     }
+
+    /**
+     * New simplified setPTZ: host, az, el, zoom (mm), deviceType
+     */
+    public static int setPTZ(String host, float az, float el, float zoom, int deviceType) {
+        if (g_controller == null) return -1;
+        // default control port 8080 for simplified call
+        int port = 8080;
+        int result = CamMonLibrary.INSTANCE.cam_controller_set_ptz(
+            g_controller, host, port, az, el, zoom, (byte)deviceType);
+        return result;
+    }
+
+        /**
+         * New overloaded setPTZ that accepts explicit port
+         */
+        public static int setPTZ(String host, int port, float az, float el, float zoom, int deviceType) {
+        if (g_controller == null) return -1;
+        int result = CamMonLibrary.INSTANCE.cam_controller_set_ptz(
+            g_controller, host, port, az, el, zoom, (byte)deviceType);
+        return result;
+        }
 }

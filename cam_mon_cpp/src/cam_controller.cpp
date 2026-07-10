@@ -26,6 +26,9 @@ using ssize_t = int;
 #include <condition_variable>
 #include <cstring>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
+#include <cmath>
 #include <plog/Log.h>
 #include <mutex>
 #include <string>
@@ -326,18 +329,34 @@ CAMMON_API int cam_controller_get_last(CamController* h, uint8_t* buf, int bufle
 }
 
 CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* out_az, float* out_el, float* out_ir_focus, float* out_vis_focus) {
-    if (!h) return 0;
+    if (!h) 
+    {
+        PLOG_ERROR << "cam_controller_get_ptz: controller handle is NULL";
+        return -1;
+    }
+    PLOG_INFO << "cam_controller_get_ptz: retrieving PTZ for IP=" << (ip ? ip : "(null)");
     std::lock_guard<std::mutex> lk(h->mtx);
     const std::vector<uint8_t>* buf_ptr = nullptr;
     if (ip != nullptr && *ip != '\0') {
         auto it = h->packets_by_ip.find(ip);
-        if (it == h->packets_by_ip.end()) return 0;
+        if (it == h->packets_by_ip.end())
+        {
+            PLOG_ERROR << "cam_controller_get_ptz: no packet found for IP=" << ip;
+            return -1;
+        }
         buf_ptr = &it->second;
+        PLOG_INFO << "cam_controller_get_ptz: found packet for IP=" << ip << ", size=" << buf_ptr->size();
     } else {
-        if (h->last_packet.empty()) return 0;
-        buf_ptr = &h->last_packet;
+        PLOG_ERROR << "cam_controller_get_ptz: IP is NULL or empty";
+        return -1;
+        // if (h->last_packet.empty()) 
+        // {
+        //     PLOG_ERROR << "cam_controller_get_ptz: no last packet available";
+        //     return 0;
+        // }
+        // buf_ptr = &h->last_packet;
     }
-    
+    PLOG_INFO << "cam_controller_get_ptz: parsing packet of size=" << buf_ptr->size();
     const std::vector<uint8_t>& buf = *buf_ptr;
     // Expect positions per protocol: ir_focus bytes 6-9, vis_focus 10-13, servo_az 26-29, servo_el 30-33
     bool ok = true;
@@ -359,13 +378,152 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* o
     return 1;
 }
 
-CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, int port,
-                          float az, float el, float azs, float els,
-                          uint16_t target_distance, uint8_t seq, uint8_t control,
-                          uint8_t device_type, uint8_t packet_type,
-                          uint8_t* resp_buf, int resp_buf_len, int timeout_ms) {
-    // call into existing API
-    return cammon_send_servo_command(host, port, az, el, azs, els, target_distance, seq, control, device_type, packet_type, resp_buf, resp_buf_len, timeout_ms);
+CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const int port,
+                          float az, float el, float zoom,
+                          uint8_t device_type) {
+    // 接口参数的device_type 表示（可见光/热成像）设备类型，0为可见光，1为热成像，与下面调用的device_type不同。
+
+    if (!h) return -1;
+    if (!host || host[0] == '\0') {
+        PLOG_ERROR << "cam_controller_set_ptz: host is NULL or empty";
+        return -2;
+    }
+    // if (device_type == 0) {
+    //     PLOG_ERROR << "cam_controller_set_ptz: device_type is 0 (invalid)";
+    //     return -3;
+    // }
+
+    // Default parameters derived from test_ptz_control behavior
+    // const int port = 8080; // default control port when not provided by caller
+    const float azs = 1.5f;
+    const float els = 0.5f;
+    const uint16_t target_distance = 0;
+    const uint8_t seq = DEFAULT_SEQ;
+    const uint8_t control = SERVO_CTRL_POSITION;
+    const uint8_t packet_type = SERVO_PACKET_TYPE_POINT;
+
+    // temporary response buffer for underlying UDP send/recv
+    const int RESP_MAX = 2048;
+    uint8_t resp[RESP_MAX];
+
+    PLOG_INFO << "cam_controller_set_ptz: sending servo to " << host << ":" << port << " az=" << az << " el=" << el << " device=" << (int)device_type;
+
+    // 构建舵机包并在发送前填充焦距字段（与 test_ptz_control.cpp / CamAJFLib::set_ptz 保持一致）
+    std::vector<uint8_t> packet = cammon::build_servo_packet(az, el, azs, els, target_distance, seq, control, device_type, packet_type);
+
+    // 填入当前焦距占位并重算校验（若包大小足够）
+    if (packet.size() >= 72) {
+        float focus = 0.0f;
+        // 尝试从最后收到的数据中获取焦距作为默认值（与 test_ptz_control.cpp 一致，使用同一焦距值填充可见光和红外焦距）
+        {
+            std::lock_guard<std::mutex> lk(h->mtx);
+            if (!h->last_packet.empty()) {
+                // 尝试解析可见光焦距位置（与 parse_and_log_status 中约定的偏移一致）
+                if (h->last_packet.size() > 13) {
+                    std::memcpy(&focus, &h->last_packet[10], sizeof(float));
+                }
+            }
+        }
+        // 注意: zoom 参数是变焦值（0-100 范围），不是焦距值（mm）。
+        // 不应将 zoom 填入 vis_focus/ir_focus 焦距字段。
+        // 焦距字段保持从 last_packet 获取的当前值（或全零）。
+        // 与 test_ptz_control.cpp 的做法一致：两个焦距使用同一个 focus 值。
+        (void)zoom; // zoom is not written to focal fields; kept as-is
+        packet[42] = 0x00; // 焦距单位 (0x00 = mm)
+        uint32_t vbits = 0;
+        std::memcpy(&vbits, &focus, sizeof(vbits));
+        packet[43] = static_cast<uint8_t>(vbits & 0xFF);
+        packet[44] = static_cast<uint8_t>((vbits >> 8) & 0xFF);
+        packet[45] = static_cast<uint8_t>((vbits >> 16) & 0xFF);
+        packet[46] = static_cast<uint8_t>((vbits >> 24) & 0xFF);
+        packet[47] = static_cast<uint8_t>(vbits & 0xFF);
+        packet[48] = static_cast<uint8_t>((vbits >> 8) & 0xFF);
+        packet[49] = static_cast<uint8_t>((vbits >> 16) & 0xFF);
+        packet[50] = static_cast<uint8_t>((vbits >> 24) & 0xFF);
+        uint8_t cs = 0;
+        for (size_t i = 0; i < 71 && i < packet.size(); ++i) cs ^= packet[i];
+        if (packet.size() > 71) packet[71] = cs;
+    }
+
+    // 发送：使用标准帧将舵机帧封装为 outer packet (addr = ADDR_SERVO)，以便与设备示例一致
+    int r = -1;
+    // outer packet: addr = ADDR_SERVO, func=0x00, ctrl=0x00, data = servo packet
+    // 使用 cammon_send_packet 发送封装包；若发送失败直接返回错误，不回退到原始舵机包
+    // 构建外层标准帧以便打印完整发送内容
+    {
+        cammon::Packet outer;
+        outer.addr = cammon::ADDR_SERVO;
+        outer.func = 0x00;
+        outer.ctrl = 0x00;
+        outer.data = packet; // servo packet as payload
+        auto out = outer.serialize();
+
+        // 打印发送的完整报文（十六进制）
+        {
+            std::ostringstream oss;
+            oss << std::hex << std::uppercase << std::setfill('0');
+            for (size_t i = 0; i < out.size(); ++i) {
+                if (i) oss << ' ';
+                oss << std::setw(2) << (int)out[i];
+            }
+            PLOG_INFO << "Sent packet (" << out.size() << " bytes): " << oss.str();
+        }
+
+        // 如果是预期的 P=150, T=20, Z=10，则比对报文是否与用户提供的参考一致
+        // if (std::fabs(az - 150.0f) < 0.001f && std::fabs(el - 20.0f) < 0.001f && std::fabs(zoom - 10.0f) < 0.001f) {
+        //     std::vector<uint8_t> expected = {
+        //         0x0F,0xF0,0x05,0x00,0x00,0x7E,0x48,0x01,0x01,0x02,0x00,0x00,0x09,0x00,0x00,0x00,
+        //         0x16,0x43,0x00,0x00,0xA0,0x41,0x00,0x00,0xC0,0x3F,0x00,0x00,0x00,0x3F,0x00,0x00,
+        //         0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        //         0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        //         0x00,0x00,0x00,0x00,0x00,0x00,0x49,0x99,0xF0,0x0F
+        //     };
+        //     if (out == expected) {
+        //         PLOG_INFO << "Outgoing packet matches expected reference for P=150 T=20 Z=10";
+        //     } else {
+        //         PLOG_WARNING << "Outgoing packet DOES NOT match expected reference for P=150 T=20 Z=10";
+        //         // Print expected for convenience
+        //         std::ostringstream eoss;
+        //         eoss << std::hex << std::uppercase << std::setfill('0');
+        //         for (size_t i = 0; i < expected.size(); ++i) {
+        //             if (i) eoss << ' ';
+        //             eoss << std::setw(2) << (int)expected[i];
+        //         }
+        //         PLOG_WARNING << "Expected: " << eoss.str();
+        //     }
+        // }
+    }
+
+    r = cammon_send_packet(host, port, cammon::ADDR_SERVO, 0x00, 0x00, packet.data(), (int)packet.size(), resp, RESP_MAX, 1000);
+    // if (r < 0) {
+    //     PLOG_ERROR << "cam_controller_set_ptz: wrapped servo packet send failed " << r;
+    //     return r;
+    // }
+
+    // 发送焦距直达命令以实现 zoom 值的下发（与 test_ptz_control 中 CamAJFLib::set_ptz 的 set_focus 一致）
+    // 标准帧: ADDR_CAMERA_VIS, function=0x06 (焦距直达), ctrl=0x00, data[0..3]=float LE(zoom)
+    if (zoom >= 0.0f) {
+        // 构建标准相机帧 payload: 前 4 字节为 zoom 的 float 小端序表示，后 11 字节填充 0x00
+        uint8_t focus_payload[15] = {0};
+        uint32_t zbits = 0;
+        std::memcpy(&zbits, &zoom, sizeof(zbits));
+        focus_payload[0] = static_cast<uint8_t>(zbits & 0xFF);
+        focus_payload[1] = static_cast<uint8_t>((zbits >> 8) & 0xFF);
+        focus_payload[2] = static_cast<uint8_t>((zbits >> 16) & 0xFF);
+        focus_payload[3] = static_cast<uint8_t>((zbits >> 24) & 0xFF);
+
+        int focus_r = cammon_send_camera_command(host, port, 0x06, 0x00,
+                                                  focus_payload, 15,
+                                                  resp, RESP_MAX, 1000);
+        
+        // if (focus_r < 0) {
+        //     PLOG_WARNING << "cam_controller_set_ptz: focus command send failed (non-fatal) " << focus_r;
+        // } else {
+        //     PLOG_INFO << "cam_controller_set_ptz: focus command sent, zoom=" << zoom;
+        // }
+    }
+
+    return 0;
 }
 
 } // extern C

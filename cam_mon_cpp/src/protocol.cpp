@@ -408,7 +408,7 @@ std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az
     s.header = 0x7E;
     s.frame_len = 0x48;
     s.seq = seq;
-    s.device_type = device_type;
+    s.device_type = 0x48;
     s.packet_type = packet_type;
     s.device_ip = 0x00;           // 设备IP (0x00=主控)
     s.main_conn = 0x00;           // 主控连接状态 (0x00=无连接)

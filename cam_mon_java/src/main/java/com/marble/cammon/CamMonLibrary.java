@@ -270,8 +270,6 @@ public interface CamMonLibrary extends Library {
      * @return 成功时接收到的字节数 (>0)，失败返回负 error code
      */
     int cam_controller_set_ptz(Pointer h, String host, int port,
-                                float az, float el, float azs, float els,
-                                short targetDistance, byte seq, byte control,
-                                byte deviceType, byte packetType,
-                                byte[] respBuf, int respBufLen, int timeoutMs);
+                                float az, float el, float zoom,
+                                byte deviceType);
 }
