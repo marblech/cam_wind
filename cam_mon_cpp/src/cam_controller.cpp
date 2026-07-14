@@ -62,6 +62,41 @@ static uint32_t read_le_u32(const std::vector<uint8_t>& buf, size_t idx) {
 
 // Minimal status parse for logging; non-fatal on failure
 static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
+    // 支持49字节上报帧（协议 3.4.1 节负载状态上报）
+    // 帧格式: [1F F1][地址][帧序号][数据41字节][校验][F1 1F]
+    if (buf.size() == 49 && buf[0] == 0x1F && buf[1] == 0xF1) {
+        // 检查帧尾
+        if (buf[47] == 0xF1 && buf[48] == 0x1F) {
+            // 校验和验证：字节2到字节46的XOR
+            uint8_t cs = 0;
+            for (size_t i = 2; i <= 46 && i < buf.size(); ++i) cs ^= buf[i];
+            if (cs != buf[47]) {
+                PLOG_WARNING << "[CamController] 49-byte report frame checksum fail: got=" << (int)cs << " expect=" << (int)buf[47];
+                // 校验失败，尝试其他解析器
+                goto try_packet_parser;
+            }
+            uint8_t addr = buf[2];
+            uint16_t seq = (uint16_t)buf[3] | ((uint16_t)buf[4] << 8);
+            float ir_focus = 0.0f;
+            float vis_focus = 0.0f;
+            float servo_az = 0.0f;
+            float servo_el = 0.0f;
+            // 数据区偏移（buf[5]是数据区开始，字段按协议3.4.1定义）
+            if (buf.size() > 13) {
+                ir_focus = *reinterpret_cast<const float*>(&buf[6]);    // [6-9] 红外焦距
+                vis_focus = *reinterpret_cast<const float*>(&buf[10]);  // [10-13] 白光焦距
+            }
+            if (buf.size() > 33) {
+                servo_az = *reinterpret_cast<const float*>(&buf[26]);   // [26-29] 伺服方位角
+                servo_el = *reinterpret_cast<const float*>(&buf[30]);   // [30-33] 伺服俯仰角
+            }
+            PLOG_INFO << "[CamController] Status(addr=" << (int)addr << " seq=" << seq
+                      << " ir=" << ir_focus << " vis=" << vis_focus
+                      << " az=" << servo_az << " el=" << servo_el << ")";
+            return true;
+        }
+    }
+    // 支持51字节及以上上报帧（旧格式）
     if (buf.size() >= 51 && buf[0] == 0x1F && buf[1] == 0xF1) {
         // basic checksum check
         uint8_t cs = 0;
@@ -86,6 +121,7 @@ static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
         PLOG_INFO << "[CamController] Status addr=" << (int)addr << " seq=" << seq << " ir=" << ir_focus << " vis=" << vis_focus << " az=" << servo_az << " el=" << servo_el;
         return true;
     }
+    try_packet_parser:
     // try Packet/ServoPacket parser if available
     try {
         auto p = Packet::deserialize(buf);
@@ -380,7 +416,7 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* o
 
 CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const int port,
                           float az, float el, float zoom,
-                          uint8_t device_type) {
+                          uint8_t device_type, action_type action) {
     // 接口参数的device_type 表示（可见光/热成像）设备类型，0为可见光，1为热成像，与下面调用的device_type不同。
 
     if (!h) return -1;
@@ -502,7 +538,7 @@ CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const 
 
     // 发送焦距直达命令以实现 zoom 值的下发（与 test_ptz_control 中 CamAJFLib::set_ptz 的 set_focus 一致）
     // 标准帧: ADDR_CAMERA_VIS, function=0x06 (焦距直达), ctrl=0x00, data[0..3]=float LE(zoom)
-    if (zoom >= 0.0f) {
+    if (zoom >= 7.0f && zoom <= 560.0f && action == action_type::ACTION_SET_ZOOM) {
         // 构建标准相机帧 payload: 前 4 字节为 zoom 的 float 小端序表示，后 11 字节填充 0x00
         uint8_t focus_payload[15] = {0};
         uint32_t zbits = 0;

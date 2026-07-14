@@ -46,15 +46,17 @@ public class DllTest {
         // 第三步：发送舵机控制命令
         System.out.println("[3/5] 发送舵机控制命令...");
         System.out.println("  目标: 192.168.1.7:" + ECHO_PORT);
-        System.out.println("  az=123.45, el=10.0, azSpeed=1.5, elSpeed=0.5");
-        System.out.println("  targetDistance=1000mm, timeout=3000ms");
+        System.out.println("  az=60.0, el=20.0, zoom=30.0mm");
+        System.out.println("  deviceType=0x01, action=ACTION_NONE");
         
+        // 使用新的 setPTZ 接口：host, port, az, el, zoom, deviceType, action
         int byteCount = CamMonNative.setPTZ(
             "192.168.1.7",
             ECHO_PORT,
-            60.0f, 20.0f,  // az, el
-            30.0f,         // zoom (mm)
-            0
+            200.0f, 20.0f,  // az, el
+            7.0f,         // zoom (mm)
+            0,          // deviceType (可见光)
+            CamMonNative.ACTION_SET_ZOOM  // action (无特殊动作)
         );
         System.out.println();
 

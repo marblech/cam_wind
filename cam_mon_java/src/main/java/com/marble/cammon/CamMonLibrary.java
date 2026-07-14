@@ -246,30 +246,21 @@ public interface CamMonLibrary extends Library {
     /**
      * 发送 PTZ（舵机）命令
      * 
-     * C 签名: int cam_controller_set_ptz(CamController* h, const char* host, int port,
-     *                                     float az, float el, float azs, float els,
-     *                                     uint16_t target_distance, uint8_t seq, uint8_t control,
-     *                                     uint8_t device_type, uint8_t packet_type,
-     *                                     uint8_t* resp_buf, int resp_buf_len, int timeout_ms)
+     * C 签名: int cam_controller_set_ptz(CamController* h, const char* host, const int port,
+     *                                     float az, float el, float zoom,
+     *                                     uint8_t device_type, action_type action)
      * 
      * @param h 控制器句柄
      * @param host 目标主机地址
      * @param port 目标端口
-     * @param az 方位角
-     * @param el 俯仰角
-     * @param azs 方位角速度
-     * @param els 俯仰角速度
-     * @param targetDistance 目标距离（毫米）
-     * @param seq 序列号
-     * @param control 控制字节
-     * @param deviceType 设备类型
-     * @param packetType 数据包类型
-     * @param respBuf 接收缓冲区
-     * @param respBufLen 接收缓冲区长度
-     * @param timeoutMs 超时时间（毫秒）
+     * @param az 方位角（度）
+     * @param el 俯仰角（度）
+     * @param zoom 变焦/焦距（毫米）
+     * @param deviceType 设备类型（使用协议中定义的编码）
+     * @param action 动作类型（ACTION_NONE=0, ACTION_SET_ZOOM=1）
      * @return 成功时接收到的字节数 (>0)，失败返回负 error code
      */
     int cam_controller_set_ptz(Pointer h, String host, int port,
                                 float az, float el, float zoom,
-                                byte deviceType);
+                                byte deviceType, byte action);
 }

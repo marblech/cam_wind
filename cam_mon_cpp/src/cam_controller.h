@@ -20,6 +20,11 @@ extern "C" {
  */
 typedef struct CamController CamController;
 
+CAMMON_API enum action_type {
+	ACTION_NONE = 0,
+	ACTION_SET_ZOOM = 1	
+};
+
 /**
  * @brief 创建控制器实例
  * @return CamController* 成功返回指针，失败返回 nullptr
@@ -143,7 +148,7 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* o
  */
 CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const int port,
 									  float az, float el, float zoom,
-									  uint8_t device_type);
+									  uint8_t device_type, action_type action);
 }
 
 #endif /* CAM_WIND_SRC_CAM_CONTROLLER_H */

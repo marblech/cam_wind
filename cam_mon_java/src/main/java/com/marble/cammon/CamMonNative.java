@@ -254,25 +254,51 @@ public class CamMonNative {
         return setPTZ(host, az, el, -1.0f, 0x01);
     }
 
+    // action_type 枚举值（与 C++ 定义一致）
+    public static final int ACTION_NONE = 0;
+    public static final int ACTION_SET_ZOOM = 1;
+    
     /**
-     * New simplified setPTZ: host, az, el, zoom (mm), deviceType
+     * New simplified setPTZ: host, az, el, zoom (mm), deviceType, action
+     * 
+     * @param host 目标主机地址
+     * @param az 方位角（度）
+     * @param el 俯仰角（度）
+     * @param zoom 变焦/焦距（毫米）
+     * @param deviceType 设备类型
+     * @param action 动作类型（ACTION_NONE=0, ACTION_SET_ZOOM=1）
+     * @return 成功时接收到的字节数 (>0)，失败返回负 error code
      */
-    public static int setPTZ(String host, float az, float el, float zoom, int deviceType) {
+    public static int setPTZ(String host, float az, float el, float zoom, int deviceType, int action) {
         if (g_controller == null) return -1;
-        // default control port 8080 for simplified call
-        int port = 8080;
+        // default control port 1234 for simplified call
+        int port = 1234;
         int result = CamMonLibrary.INSTANCE.cam_controller_set_ptz(
-            g_controller, host, port, az, el, zoom, (byte)deviceType);
+            g_controller, host, port, az, el, zoom, (byte)deviceType, (byte)action);
         return result;
     }
 
-        /**
-         * New overloaded setPTZ that accepts explicit port
-         */
-        public static int setPTZ(String host, int port, float az, float el, float zoom, int deviceType) {
+    /**
+     * New overloaded setPTZ that accepts explicit port and action
+     */
+    public static int setPTZ(String host, int port, float az, float el, float zoom, int deviceType, int action) {
         if (g_controller == null) return -1;
         int result = CamMonLibrary.INSTANCE.cam_controller_set_ptz(
-            g_controller, host, port, az, el, zoom, (byte)deviceType);
+            g_controller, host, port, az, el, zoom, (byte)deviceType, (byte)action);
         return result;
-        }
+    }
+    
+    /**
+     * Backwards compatible: setPTZ with explicit port, defaults action to ACTION_NONE
+     */
+    public static int setPTZ(String host, int port, float az, float el, float zoom, int deviceType) {
+        return setPTZ(host, port, az, el, zoom, deviceType, ACTION_NONE);
+    }
+    
+    /**
+     * Backwards compatible: setPTZ without port, defaults action to ACTION_NONE
+     */
+    public static int setPTZ(String host, float az, float el, float zoom, int deviceType) {
+        return setPTZ(host, az, el, zoom, deviceType, ACTION_NONE);
+    }
 }
