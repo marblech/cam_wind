@@ -38,6 +38,8 @@ CAMMON_API MulticastReceiver::MulticastReceiver()
     , initialized_(false)
     , running_(false)
     , packet_count_(0)
+    , sender_addr_filter_()
+    , sender_addr_filter_enabled_(false)
 {
 }
 
@@ -305,7 +307,11 @@ void MulticastReceiver::receiverThreadFunc() {
             // 获取发送方地址
             char sender_addr[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &sender.sin_addr, sender_addr, sizeof(sender_addr));
-
+            
+            if (sender_addr_filter_enabled_) {
+                if (strcmp(sender_addr, sender_addr_filter_.c_str()) != 0)
+                    continue;
+            }
             // 调用原始报文回调
             if (onRawPacket_) {
                 onRawPacket_(
@@ -347,6 +353,18 @@ void MulticastReceiver::setOnLoadStatusReportHandler(
 void MulticastReceiver::setOnRawPacketHandler(
     std::function<void(const uint8_t*, int, const char*, int)> handler) {
     onRawPacket_ = handler;
+}
+
+void MulticastReceiver::setSenderAddrFilter(const char* addr) {
+    if (addr && strlen(addr) > 0) {
+        sender_addr_filter_ = addr;
+        sender_addr_filter_enabled_ = true;
+        fprintf(stderr, "[MulticastReceiver] 启用发送方地址过滤: %s\n", sender_addr_filter_.c_str());
+    } else {
+        sender_addr_filter_.clear();
+        sender_addr_filter_enabled_ = false;
+        fprintf(stderr, "[MulticastReceiver] 取消发送方地址过滤\n");
+    }
 }
 
 bool MulticastReceiver::parseReceivedPacket(const uint8_t* buf, int len,

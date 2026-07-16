@@ -31,16 +31,21 @@ extern "C" {
 #endif
 
 /**
- * @brief 发送 UDP 数据包并等待接收响应
+ * @brief 发送 UDP 数据包（仅发送，不等待或处理响应）
  * 
+ * 注意：该函数只是将数据发送到目标地址并立即返回，不会执行 recv 操作。
+ * 函数签名保持不变以维护 ABI，但返回语义已更改：
+ * - 成功时返回已发送的字节数（>=0），
+ * - 失败时返回负数错误码（与此前保持相同的负号约定以便调用端用 r<0 判断错误）。
+ *
  * @param host 目标主机 IP 地址
  * @param port 目标端口号
  * @param outbuf 发送数据缓冲区
  * @param outlen 发送数据长度
- * @param inbuf 接收缓冲区
- * @param inbuf_len 接收缓冲区最大长度
- * @param timeout_ms 超时时间（毫秒），0 表示使用默认超时
- * @return 成功时返回接收到的字节数（>0），失败返回负 error code
+ * @param inbuf 接收缓冲区（保留参数，已弃用，传入 nullptr 可忽略）
+ * @param inbuf_len 接收缓冲区最大长度（保留参数）
+ * @param timeout_ms 超时时间（毫秒），0 表示不设置发送超时
+ * @return 成功时返回已发送的字节数（>=0），失败返回负 error code
  */
 CAMMON_API int cammon_send_udp_and_recv(const char* host, int port, 
                               const uint8_t* outbuf, int outlen,
@@ -59,7 +64,7 @@ CAMMON_API int cammon_send_udp_and_recv(const char* host, int port,
  * @param resp_buf 接收缓冲区
  * @param resp_buf_len 接收缓冲区最大长度
  * @param timeout_ms 超时时间（毫秒）
- * @return 成功时返回接收到的字节数（>0），失败返回负 error code
+ * @return 成功时返回已发送的字节数（>=0），失败返回负 error code
  */
 CAMMON_API int cammon_send_camera_command(const char* host, int port, 
                                 uint8_t func, uint8_t ctrl,
@@ -97,7 +102,7 @@ CAMMON_API int cammon_send_packet(const char* host, int port,
  * @param resp_buf 接收缓冲区
  * @param resp_buf_len 接收缓冲区最大长度
  * @param timeout_ms 超时时间（毫秒）
- * @return 成功时返回接收到的字节数（>0），失败返回负 error code
+ * @return 成功时返回已发送的字节数（>=0），失败返回负 error code
  */
 CAMMON_API int cammon_send_servo_command(const char* host, int port,
                                float az, float el, float azs, float els,

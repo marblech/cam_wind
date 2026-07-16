@@ -148,7 +148,7 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* o
  */
 CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const int port,
 									  float az, float el, float zoom,
-									  uint8_t device_type, action_type action);
+									  uint8_t device_type, const int action);
 }
 
 #endif /* CAM_WIND_SRC_CAM_CONTROLLER_H */

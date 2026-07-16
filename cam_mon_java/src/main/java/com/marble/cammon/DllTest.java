@@ -45,18 +45,18 @@ public class DllTest {
 
         // 第三步：发送舵机控制命令
         System.out.println("[3/5] 发送舵机控制命令...");
-        System.out.println("  目标: 192.168.1.7:" + ECHO_PORT);
+        System.out.println("  目标: 192.168.1.153:" + ECHO_PORT);
         System.out.println("  az=60.0, el=20.0, zoom=30.0mm");
         System.out.println("  deviceType=0x01, action=ACTION_NONE");
         
         // 使用新的 setPTZ 接口：host, port, az, el, zoom, deviceType, action
         int byteCount = CamMonNative.setPTZ(
-            "192.168.1.7",
+            "192.168.1.153",
             ECHO_PORT,
-            200.0f, 20.0f,  // az, el
-            7.0f,         // zoom (mm)
+            200.0f, 30.0f,  // az, el
+            50.0f,         // zoom (mm)
             0,          // deviceType (可见光)
-            CamMonNative.ACTION_SET_ZOOM  // action (无特殊动作)
+            0  // action (无特殊动作)
         );
         System.out.println();
 
@@ -86,7 +86,7 @@ public class DllTest {
 
         // 第五步：使用 getPTZ() 接口获取解析后的 PTZ 数据
         System.out.println("[5/5] 使用 getPTZ() 接口获取解析后的 PTZ 数据...");
-        PTZStatus ptz = CamMonNative.getPTZ("192.168.1.7");
+        PTZStatus ptz = CamMonNative.getPTZ("192.168.1.153");
         if (ptz != null) {
             System.out.println("  成功获取 PTZ 数据:");
             System.out.println("    az (方位角):      " + String.format("%.2f", ptz.az) + "°");

@@ -67,11 +67,17 @@ static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
     if (buf.size() == 49 && buf[0] == 0x1F && buf[1] == 0xF1) {
         // 检查帧尾
         if (buf[47] == 0xF1 && buf[48] == 0x1F) {
-            // 校验和验证：字节2到字节46的XOR
+            // 校验和验证：校验字节位于倒数第3字节（buf[buf.size()-3]），XOR 应对从字节2到校验前一字节
             uint8_t cs = 0;
-            for (size_t i = 2; i <= 46 && i < buf.size(); ++i) cs ^= buf[i];
-            if (cs != buf[47]) {
-                PLOG_WARNING << "[CamController] 49-byte report frame checksum fail: got=" << (int)cs << " expect=" << (int)buf[47];
+            if (buf.size() < 3) {
+                // 太短，无法校验
+                goto try_packet_parser;
+            }
+            size_t cs_idx = buf.size() - 3; // 对于49字节帧，cs_idx == 46
+            // 校验为字节累加（mod 256）：对从字节2到校验前一字节求和
+            for (size_t i = 2; i < cs_idx && i < buf.size(); ++i) cs = static_cast<uint8_t>(cs + buf[i]);
+            if (cs != buf[cs_idx]) {
+                PLOG_WARNING << "[CamController] 49-byte report frame checksum fail: got=" << (int)cs << " expect=" << (int)buf[cs_idx];
                 // 校验失败，尝试其他解析器
                 goto try_packet_parser;
             }
@@ -90,9 +96,9 @@ static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
                 servo_az = *reinterpret_cast<const float*>(&buf[26]);   // [26-29] 伺服方位角
                 servo_el = *reinterpret_cast<const float*>(&buf[30]);   // [30-33] 伺服俯仰角
             }
-            PLOG_INFO << "[CamController] Status(addr=" << (int)addr << " seq=" << seq
-                      << " ir=" << ir_focus << " vis=" << vis_focus
-                      << " az=" << servo_az << " el=" << servo_el << ")";
+            // PLOG_INFO << "[CamController] Status(addr=" << (int)addr << " seq=" << seq
+            //           << " ir=" << ir_focus << " vis=" << vis_focus
+            //           << " az=" << servo_az << " el=" << servo_el << ")";
             return true;
         }
     }
@@ -100,7 +106,8 @@ static bool parse_and_log_status(const std::vector<uint8_t>& buf) {
     if (buf.size() >= 51 && buf[0] == 0x1F && buf[1] == 0xF1) {
         // basic checksum check
         uint8_t cs = 0;
-        for (size_t i = 2; i <= 47 && i < buf.size(); ++i) cs ^= buf[i];
+        // 旧格式同样使用字节累加校验（mod 256）——累加从字节2到校验前一字节（这里47 为校验前一字节）
+        for (size_t i = 2; i <= 47 && i < buf.size(); ++i) cs = static_cast<uint8_t>(cs + buf[i]);
         if (cs != buf[48]) return false;
         uint8_t addr = buf[2];
         uint16_t seq = (uint16_t)buf[3] | ((uint16_t)buf[4] << 8);
@@ -250,6 +257,15 @@ static void listener_loop(CamController* c) {
             char ip_str[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &(src.sin_addr), ip_str, INET_ADDRSTRLEN);
             c->packets_by_ip[std::string(ip_str)] = buf;
+            // Log UDP source address and raw packet bytes (hex) for diagnostics
+            std::ostringstream _hexss;
+            _hexss << std::hex << std::uppercase << std::setfill('0');
+            for (size_t _i = 0; _i < buf.size(); ++_i) {
+                if (_i) _hexss << ' ';
+                _hexss << std::setw(2) << (int)buf[_i];
+            }
+            // PLOG_INFO << "[CamController] Received UDP from " << ip_str << ":" << ntohs(src.sin_port)
+            //           << " len=" << buf.size() << " raw=" << _hexss.str();
         }
         // parse/log
         parse_and_log_status(buf);
@@ -323,6 +339,21 @@ CAMMON_API int cam_controller_start_ex(CamController* h, int port, const char* m
         h->running.store(false);
         return -3;
     }
+    // Wait for listener thread to create and bind its socket so callers
+    // don't race sending packets before the listener is ready. Some
+    // environments are sensitive to scheduling and logging (INFO level)
+    // can hide the race by slowing things down; explicitly wait here.
+    int waited_ms = 0;
+    while (waited_ms < 5000 && h->sock < 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        waited_ms += 10;
+    }
+    if (h->sock < 0) {
+        PLOG_ERROR << "[CamController] Listener failed to bind within timeout";
+        // Stop the thread and report error
+        cam_controller_stop(h);
+        return -4;
+    }
     return 0;
 }
 
@@ -338,7 +369,7 @@ CAMMON_API void cam_controller_stop(CamController* h) {
             mreq.imr_interface.s_addr = INADDR_ANY;
             if (setsockopt(h->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char*)&mreq, sizeof(mreq)) < 0) {
                 // best-effort; don't fail stop on this
-                PLOG_ERROR << "cam_controller IP_DROP_MEMBERSHIP failed";
+                // PLOG_ERROR << "cam_controller IP_DROP_MEMBERSHIP failed";
             } else {
                 PLOG_INFO << "[CamController] Left multicast group " << h->mcast_group;
             }
@@ -378,19 +409,31 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* o
         if (it == h->packets_by_ip.end())
         {
             PLOG_ERROR << "cam_controller_get_ptz: no packet found for IP=" << ip;
-            return -1;
+            // Dump known IPs for diagnostics
+            std::string known;
+            for (const auto& kv : h->packets_by_ip) {
+                if (!known.empty()) known += ", ";
+                known += kv.first;
+            }
+            PLOG_ERROR << "cam_controller_get_ptz: known packet IPs: " << (known.empty() ? "(none)" : known);
+            // Fallback: if we have a last_packet, use it as a best-effort fallback
+            if (!h->last_packet.empty()) {
+                PLOG_WARNING << "cam_controller_get_ptz: using last_packet as fallback for IP=" << (ip ? ip : "(null)");
+                buf_ptr = &h->last_packet;
+            } else {
+                return -1;
+            }
         }
         buf_ptr = &it->second;
         PLOG_INFO << "cam_controller_get_ptz: found packet for IP=" << ip << ", size=" << buf_ptr->size();
     } else {
-        PLOG_ERROR << "cam_controller_get_ptz: IP is NULL or empty";
-        return -1;
-        // if (h->last_packet.empty()) 
-        // {
-        //     PLOG_ERROR << "cam_controller_get_ptz: no last packet available";
-        //     return 0;
-        // }
-        // buf_ptr = &h->last_packet;
+        // If caller passed NULL/empty IP, use last_packet if available
+        if (h->last_packet.empty()) {
+            PLOG_ERROR << "cam_controller_get_ptz: IP is NULL or empty and no last_packet available";
+            return -1;
+        }
+        PLOG_INFO << "cam_controller_get_ptz: using last_packet because IP is NULL or empty";
+        buf_ptr = &h->last_packet;
     }
     PLOG_INFO << "cam_controller_get_ptz: parsing packet of size=" << buf_ptr->size();
     const std::vector<uint8_t>& buf = *buf_ptr;
@@ -416,9 +459,10 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* o
 
 CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const int port,
                           float az, float el, float zoom,
-                          uint8_t device_type, action_type action) {
+                          uint8_t device_type, const int action) {
     // 接口参数的device_type 表示（可见光/热成像）设备类型，0为可见光，1为热成像，与下面调用的device_type不同。
-
+    PLOG_INFO << "cam_controller_set_ptz: sending servo to " << host << ":" << port 
+    << " az=" << az << " el=" << el << " zoom=" << zoom << " device=" << (int)device_type << " action=" << (int)action;
     if (!h) return -1;
     if (!host || host[0] == '\0') {
         PLOG_ERROR << "cam_controller_set_ptz: host is NULL or empty";
@@ -440,9 +484,7 @@ CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const 
 
     // temporary response buffer for underlying UDP send/recv
     const int RESP_MAX = 2048;
-    uint8_t resp[RESP_MAX];
-
-    PLOG_INFO << "cam_controller_set_ptz: sending servo to " << host << ":" << port << " az=" << az << " el=" << el << " device=" << (int)device_type;
+    // uint8_t resp[RESP_MAX];
 
     // 构建舵机包并在发送前填充焦距字段（与 test_ptz_control.cpp / CamAJFLib::set_ptz 保持一致）
     std::vector<uint8_t> packet = cammon::build_servo_packet(az, el, azs, els, target_distance, seq, control, device_type, packet_type);
@@ -530,7 +572,7 @@ CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const 
         // }
     }
 
-    r = cammon_send_packet(host, port, cammon::ADDR_SERVO, 0x00, 0x00, packet.data(), (int)packet.size(), resp, RESP_MAX, 1000);
+    r = cammon_send_packet(host, port, cammon::ADDR_SERVO, 0x00, 0x00, packet.data(), (int)packet.size(), nullptr, RESP_MAX, 0);
     // if (r < 0) {
     //     PLOG_ERROR << "cam_controller_set_ptz: wrapped servo packet send failed " << r;
     //     return r;
@@ -547,10 +589,27 @@ CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const 
         focus_payload[1] = static_cast<uint8_t>((zbits >> 8) & 0xFF);
         focus_payload[2] = static_cast<uint8_t>((zbits >> 16) & 0xFF);
         focus_payload[3] = static_cast<uint8_t>((zbits >> 24) & 0xFF);
+        {
+            cammon::Packet outer;            
+            outer.func = 0x06;
+            outer.ctrl = 0x00;
+            // copy focus_payload array into outer.data (std::vector<uint8_t>)
+            outer.data.assign(focus_payload, focus_payload + 15);
+            auto out = outer.serialize();
+            {
+                std::ostringstream oss;
+                oss << std::hex << std::uppercase << std::setfill('0');
+                for (size_t i = 0; i < out.size(); ++i) {
+                    if (i) oss << ' ';
+                    oss << std::setw(2) << (int)out[i];
+                }
+                PLOG_INFO << "send zoom command packet (" << out.size() << " bytes): " << oss.str();
+            }
+        }
 
         int focus_r = cammon_send_camera_command(host, port, 0x06, 0x00,
                                                   focus_payload, 15,
-                                                  resp, RESP_MAX, 1000);
+                                                  nullptr, RESP_MAX, 0);
         
         // if (focus_r < 0) {
         //     PLOG_WARNING << "cam_controller_set_ptz: focus command send failed (non-fatal) " << focus_r;

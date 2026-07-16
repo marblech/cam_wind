@@ -162,6 +162,15 @@ public:
         std::function<void(const uint8_t*, int, const char*, int)> handler);
 
     /**
+     * @brief 设置发送方地址过滤
+     *
+     * 如果设置了非空地址，则只接受来自该发送方地址的报文，其他来源将被忽略。
+     *
+     * @param addr 发送方 IPv4 地址，传入 nullptr 或空字符串可取消过滤
+     */
+    void setSenderAddrFilter(const char* addr);
+
+    /**
      * @brief 获取当前接收状态
      * 
      * @return true 正在接收，false 未接收或已停止
@@ -223,6 +232,10 @@ private:
     std::string iface_addr_;
     std::string multicast_addr_;
     int multicast_port_;
+
+    // 发送方地址过滤
+    std::string sender_addr_filter_;
+    bool sender_addr_filter_enabled_;
 };
 
 } // namespace cammon

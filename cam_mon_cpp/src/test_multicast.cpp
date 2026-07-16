@@ -87,6 +87,7 @@ static void printUsage(const char* prog) {
     fprintf(stderr, "  -p <port>    组播端口 (默认: %d)\n", MULTICAST_GROUP_PORT);
     fprintf(stderr, "  -m <addr>    组播组地址 (默认: %s)\n", MULTICAST_GROUP_ADDR);
     fprintf(stderr, "  -i <addr>    网络接口地址 (可选，默认自动检测)\n");
+    fprintf(stderr, "  -s <addr>    发送方地址过滤 (可选)\n");
     fprintf(stderr, "  -h           显示此帮助\n");
     fprintf(stderr, "\n示例:\n");
     fprintf(stderr, "  %s                         # 全部使用默认值\n", prog);
@@ -113,6 +114,7 @@ int main(int argc, char* argv[]) {
     int port = MULTICAST_GROUP_PORT;
     std::string multicast_addr = MULTICAST_GROUP_ADDR;
     std::string iface_addr;
+    std::string sender_filter;
 
     // 解析命令行参数
     for (int i = 1; i < argc; i++) {
@@ -132,6 +134,8 @@ int main(int argc, char* argv[]) {
             multicast_addr = argv[++i];
         } else if (arg == "-i" && i + 1 < argc) {
             iface_addr = argv[++i];
+        } else if (arg == "-s" && i + 1 < argc) {
+            sender_filter = argv[++i];
         } else {
             // 向后兼容: 第一个无标志参数作为接口地址
             if (i == 1 && arg[0] != '-') {
@@ -154,11 +158,17 @@ int main(int argc, char* argv[]) {
     } else {
         PLOG_INFO << "  接口地址: (自动检测)";
     }
+    if (!sender_filter.empty()) {
+        PLOG_INFO << "  发送方地址过滤: " << sender_filter;
+    }
     PLOG_INFO << "  按 Ctrl+C 退出";
     PLOG_INFO << "========================================";
 
     // 创建组播接收器
     cammon::MulticastReceiver receiver;
+    if (!sender_filter.empty()) {
+        receiver.setSenderAddrFilter(sender_filter.c_str());
+    }
 
     // 设置原始报文回调
     receiver.setOnRawPacketHandler([](const uint8_t* data, int len, const char* addr, int port) {

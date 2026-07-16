@@ -98,20 +98,15 @@ CAMMON_API int cammon_send_udp_and_recv(const char* host, int port, const uint8_
         inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf));
         PLOG_INFO << "[cammon_api] local bind " << buf << ':' << ntohs(local.sin_port);
     }
+    // If timeout specified, apply send timeout
     if (timeout_ms > 0) {
         timeval tv; tv.tv_sec = timeout_ms / 1000; tv.tv_usec = (timeout_ms % 1000) * 1000;
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
         setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
     }
-    sockaddr_in peer{}; socklen_t plen = sizeof(peer);
-    int n = recvfrom(sock, reinterpret_cast<char*>(inbuf), inbuf_len, 0, (sockaddr*)&peer, &plen);
-    if (n == SOCKET_ERROR) {
-        int e = WSAGetLastError();
-        PLOG_ERROR << "[cammon_api] recvfrom failed, WSAGetLastError=" << e;
-        closesocket(sock);
-        return -10 - e;
-    }
-    closesocket(sock); return n;
+    // We no longer wait for or process a response; return number of bytes sent
+    closesocket(sock);
+    (void)inbuf; (void)inbuf_len; // suppress unused warnings
+    return s;
 #else
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) return -1;
@@ -119,11 +114,12 @@ CAMMON_API int cammon_send_udp_and_recv(const char* host, int port, const uint8_
     if (inet_pton(AF_INET, host, &serv.sin_addr) != 1) { close(sock); return -2; }
     ssize_t s = sendto(sock, outbuf, outlen, 0, (sockaddr*)&serv, sizeof(serv));
     if (s < 0) { perror("[cammon_api] sendto"); close(sock); return -3; }
-    if (timeout_ms > 0) { timeval tv; tv.tv_sec = timeout_ms / 1000; tv.tv_usec = (timeout_ms % 1000) * 1000; setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)); }
-    sockaddr_in peer{}; socklen_t plen = sizeof(peer);
-    ssize_t n = recvfrom(sock, inbuf, inbuf_len, 0, (sockaddr*)&peer, &plen);
-    if (n < 0) { int e = errno; perror("[cammon_api] recvfrom"); close(sock); return -10 - e; }
-    close(sock); return (int)n;
+    // If timeout specified, apply send timeout
+    if (timeout_ms > 0) { timeval tv; tv.tv_sec = timeout_ms / 1000; tv.tv_usec = (timeout_ms % 1000) * 1000; setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)); }
+    // We no longer wait for or process a response; return number of bytes sent
+    close(sock);
+    (void)inbuf; (void)inbuf_len; // suppress unused warnings
+    return (int)s;
 #endif
 }
 
@@ -168,14 +164,7 @@ CAMMON_API int cammon_send_servo_command(const char* host, int port, float az, f
     }
     int result = cammon_send_udp_and_recv(host, port, out.data(), (int)out.size(), resp_buf, resp_buf_len, timeout_ms);
     PLOG_DEBUG << "[C++ DEBUG] cammon_send_udp_and_recv returned: " << result;
-    if (result > 0) {
-        std::ostringstream oss;
-        oss << std::hex << std::uppercase << std::setfill('0');
-        for (int i = 0; i < result && i < 20; ++i) {
-            oss << std::setw(2) << (int)resp_buf[i] << ' ';
-        }
-        PLOG_DEBUG << "[C++ DEBUG] Response bytes: " << oss.str();
-    }
+    PLOG_DEBUG << "[C++ DEBUG] bytes_sent=" << result;
     return result;
 }
 
