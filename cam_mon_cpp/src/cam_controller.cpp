@@ -621,4 +621,119 @@ CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const 
     return 0;
 }
 
+CAMMON_API int cam_controller_set_ptz_track(CamController *h, const char *host, int port, float diffPan, float diffTilt, 
+    float zoom, uint8_t device_type, int action)
+{
+    PLOG_INFO << "cam_controller_set_ptz_track: sending servo track to " << host << ":" << port 
+    << " diffPan=" << diffPan << " diffTilt=" << diffTilt << " zoom=" << zoom 
+    << " device=" << (int)device_type << " action=" << (int)action;
+    if (!h) return -1;
+    if (!host || host[0] == '\0') {
+        PLOG_ERROR << "cam_controller_set_ptz_track: host is NULL or empty";
+        return -2;
+    }
+
+    // temporary response buffer for underlying UDP send/recv
+    const int RESP_MAX = 2048;
+
+    // Default parameters derived from test_ptz_control behavior
+    const float azs = 1.5f;
+    const float els = 0.5f;
+    const uint16_t target_distance = 0;
+    const uint8_t seq = DEFAULT_SEQ;
+    const uint8_t control = SERVO_CTRL_TRACKING;
+    const uint8_t packet_type = SERVO_PACKET_TYPE_POINT;
+
+    // 构建舵机包并在发送前填充跟踪字段
+    std::vector<uint8_t> packet = cammon::build_servo_packet_tracking(diffPan, diffTilt, seq, action, device_type, packet_type);
+
+    // 填入当前焦距占位并重算校验（若包大小足够）
+    if (packet.size() >= 72) {
+        float focus = 0.0f;
+        // 尝试从最后收到的数据中获取焦距作为默认值
+        {
+            std::lock_guard<std::mutex> lk(h->mtx);
+            if (!h->last_packet.empty()) {
+                // 尝试解析可见光焦距位置（与 parse_and_log_status 中约定的偏移一致）
+                if (h->last_packet.size() > 13) {
+                    std::memcpy(&focus, &h->last_packet[10], sizeof(float));
+                }
+            }
+        }
+        (void)zoom; // zoom is not written to focal fields; kept as-is
+        packet[42] = 0x00; // 焦距单位 (0x00 = mm)
+        uint32_t vbits = 0;
+        std::memcpy(&vbits, &focus, sizeof(vbits));
+        packet[43] = static_cast<uint8_t>(vbits & 0xFF);
+        packet[44] = static_cast<uint8_t>((vbits >> 8) & 0xFF);
+        packet[45] = static_cast<uint8_t>((vbits >> 16) & 0xFF);
+        packet[46] = static_cast<uint8_t>((vbits >> 24) & 0xFF);
+        packet[47] = static_cast<uint8_t>(vbits & 0xFF);
+        packet[48] = static_cast<uint8_t>((vbits >> 8) & 0xFF);
+        packet[49] = static_cast<uint8_t>((vbits >> 16) & 0xFF);
+        packet[50] = static_cast<uint8_t>((vbits >> 24) & 0xFF);
+        uint8_t cs = 0;
+        for (size_t i = 0; i < 71 && i < packet.size(); ++i) cs ^= packet[i];
+        if (packet.size() > 71) packet[71] = cs;
+    }
+
+    // 发送：使用标准帧将舵机帧封装为 outer packet (addr = ADDR_SERVO)
+    int r = -1;
+    {
+        cammon::Packet outer;
+        outer.addr = cammon::ADDR_SERVO;
+        outer.func = 0x00;
+        outer.ctrl = 0x00;
+        outer.data = packet; // servo packet as payload
+        auto out = outer.serialize();
+
+        // 打印发送的完整报文（十六进制）
+        {
+            std::ostringstream oss;
+            oss << std::hex << std::uppercase << std::setfill('0');
+            for (size_t i = 0; i < out.size(); ++i) {
+                if (i) oss << ' ';
+                oss << std::setw(2) << (int)out[i];
+            }
+            PLOG_INFO << "Sent track packet (" << out.size() << " bytes): " << oss.str();
+        }
+    }
+
+    r = cammon_send_packet(host, port, cammon::ADDR_SERVO, 0x00, 0x00, packet.data(), (int)packet.size(), nullptr, RESP_MAX, 0);
+
+    // 发送焦距直达命令以实现 zoom 值的下发
+    if (zoom >= 7.0f && zoom <= 560.0f && action == action_type::ACTION_SET_ZOOM) {
+        uint8_t focus_payload[15] = {0};
+        uint32_t zbits = 0;
+        std::memcpy(&zbits, &zoom, sizeof(zbits));
+        focus_payload[0] = static_cast<uint8_t>(zbits & 0xFF);
+        focus_payload[1] = static_cast<uint8_t>((zbits >> 8) & 0xFF);
+        focus_payload[2] = static_cast<uint8_t>((zbits >> 16) & 0xFF);
+        focus_payload[3] = static_cast<uint8_t>((zbits >> 24) & 0xFF);
+        {
+            cammon::Packet outer;
+            outer.func = 0x06;
+            outer.ctrl = 0x00;
+            outer.data.assign(focus_payload, focus_payload + 15);
+            auto out = outer.serialize();
+            {
+                std::ostringstream oss;
+                oss << std::hex << std::uppercase << std::setfill('0');
+                for (size_t i = 0; i < out.size(); ++i) {
+                    if (i) oss << ' ';
+                    oss << std::setw(2) << (int)out[i];
+                }
+                PLOG_INFO << "send zoom command packet (" << out.size() << " bytes): " << oss.str();
+            }
+        }
+
+        int focus_r = cammon_send_camera_command(host, port, 0x06, 0x00,
+                                                  focus_payload, 15,
+                                                  nullptr, RESP_MAX, 0);
+        (void)focus_r;
+    }
+
+    return r;
+}
+
 } // extern C

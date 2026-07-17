@@ -167,3 +167,17 @@ endif()
 set_target_properties(test_ptz_control PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
 )
+
+# ============================================================================
+# PTZ Track test
+# ============================================================================
+add_executable(test_track src/test_track.cpp)
+
+if(WIN32)
+    target_link_libraries(test_track PRIVATE cammon ws2_32)
+else()
+    target_link_libraries(test_track PRIVATE cammon pthread)
+endif()
+set_target_properties(test_track PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${LIB_OUTPUT_DIR}
+)

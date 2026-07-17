@@ -431,6 +431,39 @@ std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az
     return s.serialize_servo();
 }
 
+/**
+ * @brief 构建舵机跟踪控制数据包
+ */
+std::vector<uint8_t> build_servo_packet_tracking(float diffPan, float diffTilt,  uint8_t seq, uint8_t action, uint8_t device_type, uint8_t packet_type) 
+{
+    ServoPacket s;
+    s.header = 0x7E;
+    s.frame_len = 0x48;
+    s.seq = seq;
+    s.device_type = 0x14;
+    s.packet_type = packet_type;
+    s.device_ip = 0x00;           // 设备IP (0x00=主控)
+    s.main_conn = 0x01;           // 主控连接状态 (0x01=有连接)
+    // 控制字节：action != 0 时为跟踪启动(0x0B), action == 0 时为跟踪停止(0x0A)
+    s.control = (action != 0) ? 0x0B : 0x0A;
+    s.wiper_heater_ctrl = 0x00;   // 雨刷/加热控制 (默认关闭)
+    s.azimuth = 0x00;
+    s.elevation = 0x00;
+    s.az_speed = 0x00;
+    s.el_speed = 0x00;
+    s.target_distance = 0x00;
+    s.target_el_aberration = 0;       // 目标俯仰偏差
+    s.track_az_aberration = diffPan;     // 跟踪方位偏差角度
+    s.track_el_aberration = diffTilt;     // 跟踪俯仰偏差角度
+    s.fov_angle = 0.0f;               // 视场角度
+    s.ir_power_ctrl = 0x00;           // 红外下电
+    s.reserved.fill(0);  // 备份字段 (13字节)
+    s.timestamp = static_cast<uint32_t>(0);                 // 时间戳，低字节为 0xDF 以匹配样例
+    s.track_status = (action != 0) ? 0x01 : 0x00;            // 跟踪状态：跟踪正常=0x01，否则=0x00
+    s.backup = static_cast<uint16_t>(0);;                     // 备份数据 (固定 0x0000)
+    return s.serialize_servo();
+}
+
 } // namespace cammon
 
 // ============================================================================

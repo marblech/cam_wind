@@ -149,6 +149,30 @@ CAMMON_API int cam_controller_get_ptz(CamController* h, const char* ip, float* o
 CAMMON_API int cam_controller_set_ptz(CamController* h, const char* host, const int port,
 									  float az, float el, float zoom,
 									  uint8_t device_type, const int action);
+
+/**
+ * @brief 发送 PTZ（舵机）跟踪命令
+ *
+ * 该接口被简化为仅需要目标主机地址、要设置的 PTZ 差值以及设备类型。
+ * 实现会使用合理的默认值（速度、包类型、序列号等）来构建舵机包并发送，
+ * 并在必要时向相机发送焦距（focus）直达命令以实现 zoom 的下发。
+ *
+ * 如果 `host` 为 NULL 或空字符串，或 `device_type` 未指定（例如为 0），
+ * 则立即返回错误。
+ *
+ * @param h 控制器句柄
+ * @param host 目标主机 IP 地址（不可为空）
+ * @param port 目标主机端口
+ * @param diffPan 方位角差值（度）
+ * @param diffTilt 俯仰角差值（度）
+ * @param zoom 变焦/焦距（以 mm 为单位，若不需要可传负数）
+ * @param device_type 设备类型（可见光 / 热成像，使用协议中定义的编码）
+ * @param action 动作类型
+ * @return 成功时返回 cammon_send_servo_command 的返回值（>0 表示收到字节数），失败返回负错误码
+ */
+CAMMON_API int cam_controller_set_ptz_track(CamController* h, const char* host, const int port,
+									  float diffPan, float diffTilt, float zoom,
+									  uint8_t device_type, const int action);									  
 }
 
 #endif /* CAM_WIND_SRC_CAM_CONTROLLER_H */

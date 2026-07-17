@@ -191,6 +191,7 @@ static constexpr uint8_t SERVO_CTRL_POSITION = 0x09; ///< 伺服位置控制字�
 static constexpr uint8_t SERVO_DEVICE_TYPE = 0x01;    ///< 舵机设备类型
 static constexpr uint8_t SERVO_PACKET_TYPE_POINT = 0x02; ///< 定点报文类型
 static constexpr uint8_t DEFAULT_MOVE_AMOUNT = 0x0A; ///< 默认移动量（十字线等）
+static constexpr uint8_t SERVO_CTRL_TRACKING = 0x0B; ///< 舵机跟踪控制字节（低四位=1011b 表示跟踪模式）
 
 
 // ============================================================================
@@ -577,6 +578,21 @@ Packet make_camera_command(uint8_t func, uint8_t ctrl, const std::vector<uint8_t
  * @return std::vector<uint8_t> 序列化后的 72 字节向量
  */
 std::vector<uint8_t> build_servo_packet(float azimuth, float elevation, float az_speed, float el_speed, uint16_t target_distance, uint8_t seq = 0x01, uint8_t control = 0x09, uint8_t device_type = 0x01, uint8_t packet_type = 0x02);
+
+/**
+ * @brief 构建舵机跟踪数据包
+ * 
+ * 生成用于舵机跟踪控制的标准数据包，包含方位和俯仰偏差信息。
+ * 
+ * @param diffPan 跟踪方位偏差角度 (单位: 度)
+ * @param diffTilt 跟踪俯仰偏差角度 (单位: 度)
+ * @param seq 序列号 (用于匹配请求和响应)
+ * @param action 跟踪动作 (控制标志位)
+ * @param device_type 设备类型 (默认 0x01 表示舵机控制器)
+ * @param packet_type 数据包类型 (默认 0x02 表示定点报告)
+ * @return std::vector<uint8_t> 序列化后的 72 字节向量
+ */
+std::vector<uint8_t> build_servo_packet_tracking(float diffPan, float diffTilt,  uint8_t seq, uint8_t action, uint8_t device_type, uint8_t packet_type);
 
 // ============================================================================
 // 舵机专用数据包结构 (帧起始符 0x7E)
